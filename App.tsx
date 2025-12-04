@@ -221,6 +221,7 @@ export const App: React.FC = () => {
   const [savedTrips, setSavedTrips] = useState<SavedTrip[]>([]);
   const [showSavesModal, setShowSavesModal] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load saved trips on mount
@@ -259,15 +260,12 @@ export const App: React.FC = () => {
   const handleDurationChange = (newDuration: number) => {
     const safeDuration = Math.max(1, newDuration);
     setParams(prev => {
-       // Adjust last hotel stay to match new duration
        const currentStaysDuration = prev.hotelStays.reduce((acc, s) => acc + s.nights, 0);
        const diff = safeDuration - currentStaysDuration;
        
        let newStays = [...prev.hotelStays];
        if (newStays.length > 0) {
-         // Modify last stay
          const lastStay = newStays[newStays.length - 1];
-         // Ensure nights doesn't go below 1 unless it's being removed (simple logic: just clamp to 1 minimum for last stay if total > 1)
          const newNights = Math.max(1, lastStay.nights + diff);
          newStays[newStays.length - 1] = { ...lastStay, nights: newNights };
        } else {
@@ -282,12 +280,10 @@ export const App: React.FC = () => {
          }];
        }
 
-       // Helper to fix total nights mismatch if simple math failed (e.g. multiple stays)
        const finalTotal = newStays.reduce((acc, s) => acc + s.nights, 0);
        if (finalTotal < safeDuration) {
           newStays[newStays.length - 1].nights += (safeDuration - finalTotal);
        } else if (finalTotal > safeDuration) {
-          // Reduce from end
           let remove = finalTotal - safeDuration;
           for (let i = newStays.length - 1; i >= 0 && remove > 0; i--) {
              if (newStays[i].nights > remove) {
@@ -369,10 +365,8 @@ export const App: React.FC = () => {
   };
 
   const costs = useMemo((): CostBreakdown => {
-    // Hotel cost calculated from Stays
     const totalHotelCostPerPerson = params.hotelStays.reduce((acc, stay) => acc + (stay.nights * stay.costPerNight), 0);
     
-    // 1. Guide Costs
     let guideFees = 0;
     let guideAccommodation = 0;
     let guideLunch = 0;
@@ -392,7 +386,6 @@ export const App: React.FC = () => {
     }
     const guideTravel = params.hasGuide ? params.guide.travelCost : 0;
 
-    // 2. Driver Costs
     let driverFees = 0;
     let driverAccommodation = 0;
     let driverLunch = 0;
@@ -412,7 +405,6 @@ export const App: React.FC = () => {
     }
     const driverTravel = params.hasDriver ? params.driver.travelCost : 0;
 
-    // 3. Vehicle Costs
     let vanRentalTotal = 0;
     let fuelTotal = 0;
 
@@ -421,7 +413,6 @@ export const App: React.FC = () => {
         fuelTotal = getSum(params.fuelDailyCostsBefore) + getSum(params.fuelDailyCosts) + getSum(params.fuelDailyCostsAfter);
     }
 
-    // 4. Totals
     const staffFeesTotal = guideFees + driverFees;
     const staffTravelTotal = guideTravel + driverTravel;
     const staffAccTotal = guideAccommodation + driverAccommodation;
@@ -527,7 +518,6 @@ export const App: React.FC = () => {
     localStorage.setItem('tourCalc_saves', JSON.stringify(updated));
   };
 
-  // Export JSON Backup
   const handleExportBackup = () => {
     const dataStr = JSON.stringify(savedTrips, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
@@ -538,7 +528,6 @@ export const App: React.FC = () => {
     linkElement.click();
   };
 
-  // Import JSON Backup
   const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
     const fileReader = new FileReader();
     const files = event.target.files;
@@ -550,7 +539,6 @@ export const App: React.FC = () => {
           const content = e.target?.result as string;
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
-            // Basic validation check
             if (parsed.length > 0 && !parsed[0].params) {
               throw new Error("Formato non valido");
             }
@@ -559,7 +547,6 @@ export const App: React.FC = () => {
                localStorage.setItem('tourCalc_saves', JSON.stringify(parsed));
             } else {
                const merged = [...parsed, ...savedTrips];
-               // remove duplicates by ID
                const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
                setSavedTrips(unique);
                localStorage.setItem('tourCalc_saves', JSON.stringify(unique));
@@ -623,8 +610,9 @@ export const App: React.FC = () => {
 
   const handleExportPDF = () => {
     const doc = new jsPDF();
-    const primaryColor = [109, 40, 217]; // Brand 700
-    const secondaryColor = [245, 243, 255]; // Brand 50
+    // Explicit Tuple Type Definition for jsPDF to avoid TS Errors
+    const primaryColor: [number, number, number] = [109, 40, 217]; // Brand 700
+    const secondaryColor: [number, number, number] = [245, 243, 255]; // Brand 50
 
     // Header
     doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
@@ -640,7 +628,7 @@ export const App: React.FC = () => {
     // Info Viaggio Box
     doc.setDrawColor(200, 200, 200);
     doc.setFillColor(255, 255, 255);
-    doc.rect(14, 30, 182, 25, 'FD'); // Box border
+    doc.rect(14, 30, 182, 25, 'FD'); 
     
     doc.setTextColor(50, 50, 50);
     doc.setFontSize(14);
@@ -661,738 +649,654 @@ export const App: React.FC = () => {
         
         if (params.hasGuide) {
             const guideFeeTotal = getSum(params.guide.dailyRatesBefore) + getSum(params.guide.dailyRates) + getSum(params.guide.dailyRatesAfter);
-            staffBody.push(['Guida Ciclistica', 
-                `Prima: ${params.guide.extraDaysBefore}gg\nDur: ${params.durationDays}gg\nDopo: ${params.guide.extraDaysAfter}gg`,
-                `€${guideFeeTotal.toFixed(2)}`,
-                `€${params.guide.travelCost.toFixed(2)}`
+            staffBody.push(["Guida Ciclistica", 
+                `Tour (${params.durationDays}gg) + Extra (${params.guide.extraDaysBefore + params.guide.extraDaysAfter}gg)`, 
+                `€${guideFeeTotal.toFixed(2)}`
             ]);
+            staffBody.push(["Viaggio Guida", "Volo/Trasferimento", `€${params.guide.travelCost.toFixed(2)}`]);
         }
         if (params.hasDriver) {
-             const driverFeeTotal = getSum(params.driver.dailyRatesBefore) + getSum(params.driver.dailyRates) + getSum(params.driver.dailyRatesAfter);
-             staffBody.push(['Autista', 
-                `Prima: ${params.driver.extraDaysBefore}gg\nDur: ${params.durationDays}gg\nDopo: ${params.driver.extraDaysAfter}gg`,
-                `€${driverFeeTotal.toFixed(2)}`,
-                `€${params.driver.travelCost.toFixed(2)}`
+            const driverFeeTotal = getSum(params.driver.dailyRatesBefore) + getSum(params.driver.dailyRates) + getSum(params.driver.dailyRatesAfter);
+            staffBody.push(["Autista", 
+                `Tour (${params.durationDays}gg) + Extra (${params.driver.extraDaysBefore + params.driver.extraDaysAfter}gg)`, 
+                `€${driverFeeTotal.toFixed(2)}`
             ]);
+            staffBody.push(["Viaggio Autista", "Volo/Trasferimento", `€${params.driver.travelCost.toFixed(2)}`]);
         }
 
         autoTable(doc, {
             startY: finalY,
-            head: [['Ruolo', 'Giorni Impegno', 'Compensi Totali', 'Viaggio A/R']],
+            head: [['Ruolo', 'Dettaglio Giorni/Servizio', 'Costo Totale']],
             body: staffBody,
             theme: 'grid',
-            headStyles: { fillColor: primaryColor, fontSize: 9 },
-            styles: { fontSize: 9, cellPadding: 2 },
-            columnStyles: { 0: { fontStyle: 'bold' } }
+            headStyles: { fillColor: primaryColor, textColor: 255 },
+            styles: { fontSize: 9 }
         });
+        
         // @ts-ignore
         finalY = doc.lastAutoTable.finalY + 10;
     }
 
-    // --- TABELLA 2: LOGISTICA & VARI ---
-    const logisticsBody = [
-        ['Noleggio Van', `€${costs.fixedCosts.vanRental.toFixed(2)}`],
-        ['Carburante', `€${costs.fixedCosts.fuel.toFixed(2)}`],
-        ['Vitto & Alloggio Staff', `€${(costs.fixedCosts.staffAccommodation + costs.fixedCosts.staffLunch).toFixed(2)}`],
+    // --- TABELLA 2: LOGISTICA & VITTO STAFF ---
+    const logBody = [
+        ["Noleggio Van", `Totale per ${(params.hasDriver ? params.durationDays + params.driver.extraDaysBefore + params.driver.extraDaysAfter : 0)} giorni`, `€${costs.fixedCosts.vanRental.toFixed(2)}`],
+        ["Carburante", "Stima Totale", `€${costs.fixedCosts.fuel.toFixed(2)}`],
+        ["Alloggio Staff", "Guida + Autista (Mezza Pensione)", `€${costs.fixedCosts.staffAccommodation.toFixed(2)}`],
+        ["Pasti Staff", "Pranzi on tour", `€${costs.fixedCosts.staffLunch.toFixed(2)}`]
     ];
 
     autoTable(doc, {
         startY: finalY,
-        head: [['Voce Logistica', 'Costo Totale']],
-        body: logisticsBody,
-        theme: 'striped',
-        headStyles: { fillColor: [100, 116, 139] }, // slate-500
-        styles: { fontSize: 9 },
-        columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
+        head: [['Voce Logistica', 'Note', 'Costo']],
+        body: logBody,
+        theme: 'grid',
+        headStyles: { fillColor: [139, 92, 246], textColor: 255 }, // Violet-500
+        styles: { fontSize: 9 }
     });
-     // @ts-ignore
+    // @ts-ignore
     finalY = doc.lastAutoTable.finalY + 10;
 
     // --- TABELLA 3: HOTEL CLIENTI ---
-    autoTable(doc, {
-      startY: finalY,
-      head: [['Hotel / Tappa', 'Notti', 'Costo/Notte', 'Totale (per pax)']],
-      body: params.hotelStays.map(h => [
+    const hotelBody = params.hotelStays.map(h => [
         h.name,
-        h.nights,
+        `${h.nights} notti`,
         `€${h.costPerNight.toFixed(2)}`,
-        `€${(h.nights * h.costPerNight).toFixed(2)}`
-      ]),
-      theme: 'grid',
-      headStyles: { fillColor: primaryColor },
-      styles: { fontSize: 9 }
-    });
-     // @ts-ignore
-    finalY = doc.lastAutoTable.finalY + 10;
+        `€${(h.nights * h.costPerNight * params.participants).toFixed(2)}`
+    ]);
 
-    // --- TABELLA 4: RIEPILOGO FINANZIARIO ---
+    doc.text("Dettaglio Hotel Clienti", 14, finalY - 2);
     autoTable(doc, {
-      startY: finalY,
-      head: [['Voce', 'Importo', 'Note']],
-      body: [
-        [{ content: 'RIEPILOGO COSTI', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], halign: 'center' } }],
-        ['Totale Costi Fissi', `€${costs.fixedCosts.total.toFixed(2)}`, 'Staff, Mezzi, Logistica'],
-        ['Totale Costi Variabili', `€${costs.variableCosts.total.toFixed(2)}`, 'Hotel Clienti, Bici (x Tutti i pax)'],
-        ['Costo Totale Viaggio', `€${costs.totalCost.toFixed(2)}`, ''],
-        
-        [{ content: 'ANALISI PREZZO', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], halign: 'center' } }],
-        ['Costo per Persona (Vivo)', `€${costs.costPerPerson.toFixed(2)}`, ''],
-        ['Margine Applicato', `${params.profitMarginPercent}%`, ''],
-        [{ content: 'PREZZO SUGGERITO', styles: { fontStyle: 'bold', fontSize: 11 } }, { content: `€${costs.suggestedPricePerPerson.toFixed(2)}`, styles: { fontStyle: 'bold', fontSize: 11, textColor: [0, 100, 0] } }, 'Prezzo Finale per Pax'],
-        
-        [{ content: 'ANALISI REDDITIVITÀ', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], halign: 'center' } }],
-        ['Profitto Totale Previsto', `€${costs.totalProfit.toFixed(2)}`, 'Se confermati tutti i pax'],
-        ['Break-Even Point', `${costs.isBreakEvenImpossible ? 'IMPOSSIBILE' : costs.breakEvenParticipants} partecipanti`, 'Minimo per coprire i costi']
-      ],
-      theme: 'grid',
-      headStyles: { fillColor: [50, 50, 50] },
-      styles: { fontSize: 10, cellPadding: 3 },
-      columnStyles: { 
-          1: { halign: 'right', fontStyle: 'bold' },
-          2: { fontStyle: 'italic', textColor: [100, 100, 100] }
-      }
+        startY: finalY,
+        head: [['Hotel', 'Durata', 'Costo/Notte (Pax)', 'Totale Gruppo']],
+        body: hotelBody,
+        theme: 'grid',
+        headStyles: { fillColor: [244, 63, 94], textColor: 255 }, // Rose-500
+        styles: { fontSize: 9 }
     });
+    // @ts-ignore
+    finalY = doc.lastAutoTable.finalY + 15;
 
-    doc.save(`${params.tripName.replace(/\s+/g, '_')}_preventivo_dettagliato.pdf`);
+    // --- TABELLA 4: RIEPILOGO FINALE ---
+    // Check if we need new page
+    if (finalY > 240) {
+        doc.addPage();
+        finalY = 20;
+    }
+
+    doc.setFillColor(245, 243, 255); // Brand 50
+    doc.setDrawColor(109, 40, 217); // Brand 700
+    doc.rect(120, finalY, 80, 50, 'FD');
+
+    doc.setFontSize(12);
+    doc.setTextColor(109, 40, 217);
+    doc.setFont("helvetica", "bold");
+    doc.text("PREZZO CONSIGLIATO", 125, finalY + 10);
+    
+    doc.setFontSize(22);
+    doc.setTextColor(0, 0, 0);
+    doc.text(`€${costs.suggestedPricePerPerson.toFixed(0)}`, 125, finalY + 22);
+    doc.setFontSize(10);
+    doc.text("per persona", 125, finalY + 28);
+
+    doc.setFontSize(10);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Costo Vivo: €${costs.costPerPerson.toFixed(0)}`, 125, finalY + 38);
+    doc.text(`Margine: €${(costs.suggestedPricePerPerson - costs.costPerPerson).toFixed(0)} (${params.profitMarginPercent}%)`, 125, finalY + 44);
+
+    doc.save(`${params.tripName.replace(/\s+/g, '_')}_preventivo.pdf`);
   };
-
-  // Hotel Management Handlers
-  const addHotelStay = () => {
-    const currentTotalNights = params.hotelStays.reduce((sum, stay) => sum + stay.nights, 0);
-    const remaining = Math.max(1, params.durationDays - currentTotalNights);
-    const newStay: HotelStay = {
-      id: Date.now().toString(),
-      name: "Nuovo Hotel",
-      nights: remaining,
-      costPerNight: 90,
-      paymentTerms: "",
-      cancellationPolicy: "",
-      dusSupplement: 0
-    };
-    setParams(p => ({...p, hotelStays: [...p.hotelStays, newStay]}));
-  };
-
-  const removeHotelStay = (id: string) => {
-    setParams(p => ({...p, hotelStays: p.hotelStays.filter(s => s.id !== id)}));
-  };
-
-  const updateHotelStay = (id: string, field: keyof HotelStay, value: any) => {
-    setParams(p => ({
-      ...p,
-      hotelStays: p.hotelStays.map(s => s.id === id ? { ...s, [field]: value } : s)
-    }));
-  };
-
-  const totalHotelNights = params.hotelStays.reduce((sum, stay) => sum + stay.nights, 0);
-  const nightsMismatch = totalHotelNights !== params.durationDays;
-  
-  // Calculate day ranges for display
-  let currentDayCounter = 1;
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-slate-900 pb-20">
-      
-      {/* Modal Salvataggi */}
-      {showSavesModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
-            <div className="flex justify-between items-center p-5 border-b border-slate-100 bg-slate-50">
-              <h3 className="text-xl font-bold text-slate-800 flex items-center">
-                <FolderOpen className="w-5 h-5 mr-2.5 text-brand-600" />
-                I Miei Viaggi
-              </h3>
-              <button onClick={() => setShowSavesModal(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-full p-1 transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            {/* Toolbar Backup */}
-            <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex justify-between space-x-2">
-               <button onClick={handleExportBackup} className="flex-1 flex items-center justify-center px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:text-brand-600 hover:border-brand-300 transition-colors">
-                  <FileJson className="w-4 h-4 mr-2" /> Backup Dati
-               </button>
-               <label className="flex-1 flex items-center justify-center px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:text-brand-600 hover:border-brand-300 transition-colors cursor-pointer">
-                  <Upload className="w-4 h-4 mr-2" /> Ripristina
-                  <input type="file" ref={fileInputRef} onChange={handleImportBackup} accept=".json" className="hidden" />
-               </label>
-            </div>
-
-            <div className="overflow-y-auto p-5 space-y-3 flex-1">
-              {savedTrips.length === 0 ? (
-                <div className="text-center py-10">
-                   <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                   <p className="text-slate-500">Nessun viaggio salvato.</p>
-                </div>
-              ) : (
-                savedTrips.map(trip => (
-                  <div key={trip.id} className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200 hover:border-brand-300 hover:shadow-md transition-all group">
-                    <div>
-                      <div className="font-bold text-slate-800 group-hover:text-brand-700 transition-colors">{trip.name}</div>
-                      <div className="text-xs text-slate-500 mt-1 flex items-center">
-                        <Calendar className="w-3 h-3 mr-1" /> {trip.date} 
-                        <span className="mx-2">•</span> 
-                        <Users className="w-3 h-3 mr-1" /> {trip.params.participants} pax
-                      </div>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button 
-                        onClick={() => handleLoadTrip(trip)}
-                        className="p-2 text-brand-600 hover:bg-brand-50 rounded-lg transition-colors"
-                        title="Carica"
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteTrip(trip.id)}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Elimina"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            <div className="p-5 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
-               <span className="text-xs text-slate-500 hidden sm:inline">Salva la configurazione attuale.</span>
-               <button
-                  onClick={handleSaveTrip}
-                  className="w-full sm:w-auto flex items-center justify-center px-6 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-bold hover:bg-brand-700 shadow-lg shadow-brand-200 transition-all transform hover:scale-[1.02]"
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  Salva Corrente
-                </button>
-            </div>
-          </div>
-        </div>
-      )}
-
+    <div className="min-h-screen bg-slate-50 pb-20">
       {/* Header */}
-      <header className="bg-gradient-to-r from-brand-700 to-indigo-800 text-white shadow-lg sticky top-0 z-20 backdrop-blur-md bg-opacity-90 supports-[backdrop-filter]:bg-opacity-80">
-        <div className="max-w-7xl mx-auto px-4 py-3 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+      <header className="bg-gradient-to-r from-brand-700 to-brand-900 text-white shadow-lg sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="bg-white/10 p-2 rounded-xl backdrop-blur-sm border border-white/20">
-               <Calculator className="h-6 w-6 text-white" />
+            <div className="bg-white/10 p-2 rounded-lg backdrop-blur-sm">
+              <Calculator className="w-6 h-6 text-brand-200" />
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight">TourCalc Pro</h1>
-              <p className="text-[10px] text-brand-200 font-medium tracking-wider uppercase flex items-center">
-                Professional Planning Tool
+              <div className="flex items-center space-x-2 text-xs text-brand-200">
+                <span className="opacity-80">PROFESSIONAL PLANNING TOOL</span>
                 {lastAutoSave && (
-                  <span className="ml-2 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-[9px] flex items-center border border-emerald-500/30">
-                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse mr-1"></span>
-                    Salvataggio Auto
-                  </span>
+                   <span className="flex items-center bg-white/10 px-1.5 py-0.5 rounded text-[10px] animate-pulse">
+                     <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1"></span>
+                     SALVATAGGIO AUTO
+                   </span>
                 )}
-              </p>
+              </div>
             </div>
           </div>
-          <div className="flex items-center space-x-3 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 scrollbar-hide">
-             <button
+          <div className="flex items-center space-x-3">
+            <button 
               onClick={() => setShowSavesModal(true)}
-              className="flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors border border-white/10 backdrop-blur-sm whitespace-nowrap"
+              className="flex items-center px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-all"
             >
-              <FolderOpen className="h-4 w-4 mr-2" />
-              I Miei Viaggi
+               <FolderOpen className="w-4 h-4 mr-2" /> I Miei Viaggi
             </button>
-             <button
+            <button 
               onClick={handleAnalyzeCosts}
               disabled={isAiLoading}
-              className="flex items-center px-4 py-2 bg-white text-brand-700 hover:bg-brand-50 rounded-lg text-sm font-bold transition-colors disabled:opacity-50 border border-transparent shadow-lg whitespace-nowrap"
+              className="hidden sm:flex items-center px-4 py-2 bg-white text-brand-700 hover:bg-brand-50 rounded-lg text-sm font-bold shadow-glow transition-all disabled:opacity-50"
             >
-              <Sparkles className="h-4 w-4 mr-2 text-brand-600" />
-              Analisi IA
+              <Sparkles className="w-4 h-4 mr-2" />
+              {isAiLoading ? 'Analisi...' : 'Analisi IA'}
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-         {/* Tabs */}
-         <div className="flex space-x-1 bg-white p-1.5 rounded-2xl shadow-sm mb-8 w-fit mx-auto sm:mx-0 border border-slate-200">
-            <button
-               onClick={() => setActiveTab('calc')}
-               className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center ${activeTab === 'calc' ? 'bg-brand-600 shadow-md text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
-            >
-               <Calculator className="w-4 h-4 mr-2" /> Configurazione
-            </button>
-            <button
-               onClick={() => setActiveTab('proposal')}
-               className={`px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center ${activeTab === 'proposal' ? 'bg-brand-600 shadow-md text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'}`}
-            >
-               <TrendingUp className="w-4 h-4 mr-2" /> Risultati & IA
-            </button>
-         </div>
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {/* Navigation Tabs (Mobile only mainly) */}
+        <div className="flex justify-center mb-8 bg-white p-1 rounded-xl shadow-sm border border-slate-100 w-fit mx-auto">
+           <button
+             onClick={() => setActiveTab('calc')}
+             className={`flex items-center px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+               activeTab === 'calc' 
+               ? 'bg-brand-600 text-white shadow-md' 
+               : 'text-slate-500 hover:bg-slate-50'
+             }`}
+           >
+             <FileText className="w-4 h-4 mr-2" /> Configurazione
+           </button>
+           <button
+             onClick={() => handleGenerateProposal()}
+             className={`flex items-center px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+               activeTab === 'proposal' 
+               ? 'bg-brand-600 text-white shadow-md' 
+               : 'text-slate-500 hover:bg-slate-50'
+             }`}
+           >
+             <TrendingUp className="w-4 h-4 mr-2" /> Risultati & IA
+           </button>
+        </div>
 
-         {activeTab === 'calc' ? (
-           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-in slide-in-from-bottom-4 duration-500 items-start">
-              
-              {/* Left Column: Input Data */}
-              <div className="lg:col-span-7 space-y-6">
-                 
-                 {/* Section: Viaggio */}
-                 <div className="bg-white rounded-2xl shadow-soft border border-slate-100 p-6 sm:p-8 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-brand-50 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-                    <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center relative z-10"><Briefcase className="w-5 h-5 mr-2.5 text-brand-600"/> Dettagli Viaggio</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-                       <div className="col-span-1 md:col-span-2">
-                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1">Nome Viaggio</label>
-                          <input type="text" value={params.tripName} onChange={e => setParams({...params, tripName: e.target.value})} className="block w-full rounded-xl border-slate-200 bg-slate-50/50 py-3 px-4 focus:border-brand-500 focus:ring-brand-500 sm:text-sm border shadow-sm transition-all focus:bg-white" placeholder="Es. Tour delle Dolomiti" />
+        {activeTab === 'calc' ? (
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+          
+          {/* Left Column: Inputs */}
+          <div className="xl:col-span-7 space-y-6">
+            
+            {/* General Details */}
+            <SectionCard title="Dettagli Viaggio" icon={Briefcase}>
+              <div className="space-y-6">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">NOME VIAGGIO</label>
+                  <input 
+                    type="text"
+                    value={params.tripName} 
+                    onChange={e => setParams({...params, tripName: e.target.value})}
+                    className="block w-full rounded-xl border-slate-200 shadow-sm focus:border-brand-500 focus:ring-brand-500 text-lg font-bold text-slate-800 p-3"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                  <NumberInput label="Partecipanti" value={params.participants} onChange={v => setParams({...params, participants: v})} icon={Users} min={1} />
+                  <NumberInput label="Durata (Giorni)" value={params.durationDays} onChange={handleDurationChange} icon={Calendar} min={1} />
+                </div>
+                <NumberInput 
+                   label="Margine Profitto (%)" 
+                   value={params.profitMarginPercent} 
+                   onChange={v => setParams({...params, profitMarginPercent: v})} 
+                   icon={TrendingUp}
+                   suffix="%"
+                />
+              </div>
+            </SectionCard>
+
+            {/* Staff & Logistics */}
+            <SectionCard title="Staff e Logistica" icon={User}>
+              <div className="space-y-8">
+                
+                {/* Guide Section */}
+                <div className="bg-indigo-50/30 p-5 rounded-2xl border border-indigo-100">
+                  <div className="flex items-center justify-between mb-4">
+                     <h3 className="font-bold text-indigo-900 flex items-center"><User className="w-4 h-4 mr-2"/> Guida Ciclistica</h3>
+                     <Toggle label="Includi" checked={params.hasGuide} onChange={v => setParams({...params, hasGuide: v})} />
+                  </div>
+                  
+                  {params.hasGuide && (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <NumberInput label="Volo/Viaggio Guida" value={params.guide.travelCost} onChange={v => setParams({...params, guide: {...params.guide, travelCost: v}})} icon={DollarSign} />
+                          <NumberInput label="Giorni Prima" value={params.guide.extraDaysBefore} onChange={v => handleExtraDaysChange('guide', 'before', v)} icon={Clock} />
+                          <NumberInput label="Giorni Dopo" value={params.guide.extraDaysAfter} onChange={v => handleExtraDaysChange('guide', 'after', v)} icon={Clock} />
                        </div>
-                       <NumberInput label="Partecipanti" value={params.participants} onChange={v => setParams({...params, participants: v})} icon={Users} min={1} placeholder="8" />
-                       <NumberInput label="Durata (Giorni)" value={params.durationDays} onChange={handleDurationChange} icon={Calendar} min={1} placeholder="7" />
-                       <NumberInput label="Margine Profitto (%)" value={params.profitMarginPercent} onChange={v => setParams({...params, profitMarginPercent: v})} icon={TrendingUp} suffix="%" placeholder="25" />
-                    </div>
-                 </div>
 
-                 {/* Section: Staff & Logistica */}
-                 <SectionCard title="Staff e Logistica" icon={User} defaultOpen={true}>
-                    {/* Guida */}
-                    <div className="mb-8 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
-                      <Toggle label="Includi Guida Ciclistica" checked={params.hasGuide} onChange={v => setParams({...params, hasGuide: v})} />
-                      
-                      {params.hasGuide && (
-                        <div className="mt-6 space-y-6 pl-4 border-l-2 border-brand-100 animate-in fade-in slide-in-from-left-2">
-                          <div className="grid grid-cols-2 gap-4">
-                             <NumberInput label="Volo/Viaggio Guida" value={params.guide.travelCost} onChange={v => setParams({...params, guide: {...params.guide, travelCost: v}})} icon={DollarSign} />
-                             <div className="grid grid-cols-2 gap-2">
-                                <NumberInput label="Giorni Prima" value={params.guide.extraDaysBefore} onChange={v => handleExtraDaysChange('guide', 'before', v)} icon={Clock} min={0} />
-                                <NumberInput label="Giorni Dopo" value={params.guide.extraDaysAfter} onChange={v => handleExtraDaysChange('guide', 'after', v)} icon={Clock} min={0} />
-                             </div>
-                          </div>
-
-                          <div className="space-y-4">
-                             <DailyCostGrid 
-                               label="Compenso Guida (Giorni Prima)"
-                               values={params.guide.dailyRatesBefore}
-                               onChange={(v) => setParams(p => ({...p, guide: {...p.guide, dailyRatesBefore: v}}))}
-                               icon={User}
-                               variant="before"
-                             />
-                             <DailyCostGrid 
-                               label="Compenso Guida (Durante il Tour)"
-                               values={params.guide.dailyRates}
-                               onChange={(v) => setParams(p => ({...p, guide: {...p.guide, dailyRates: v}}))}
-                               icon={User}
-                             />
-                             <DailyCostGrid 
-                               label="Compenso Guida (Giorni Dopo)"
-                               values={params.guide.dailyRatesAfter}
-                               onChange={(v) => setParams(p => ({...p, guide: {...p.guide, dailyRatesAfter: v}}))}
-                               icon={User}
-                               variant="after"
-                             />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Autista & Van */}
-                    <div className="mb-6">
-                      <Toggle label="Includi Autista e Van" checked={params.hasDriver} onChange={v => setParams({...params, hasDriver: v})} />
-                      
-                      {params.hasDriver && (
-                        <div className="mt-6 space-y-6 pl-4 border-l-2 border-brand-100 animate-in fade-in slide-in-from-left-2">
-                          <div className="grid grid-cols-2 gap-4">
-                             <NumberInput label="Volo/Viaggio Autista" value={params.driver.travelCost} onChange={v => setParams({...params, driver: {...params.driver, travelCost: v}})} icon={User} />
-                             <div className="grid grid-cols-2 gap-2">
-                                <NumberInput label="Giorni Prima" value={params.driver.extraDaysBefore} onChange={v => handleExtraDaysChange('driver', 'before', v)} icon={Clock} min={0} />
-                                <NumberInput label="Giorni Dopo" value={params.driver.extraDaysAfter} onChange={v => handleExtraDaysChange('driver', 'after', v)} icon={Clock} min={0} />
-                             </div>
-                          </div>
-
-                          {/* Driver Fees */}
-                          <div className="space-y-4">
-                             <DailyCostGrid 
-                               label="Compenso Autista (Prima)" values={params.driver.dailyRatesBefore} variant="before"
-                               onChange={(v) => setParams(p => ({...p, driver: {...p.driver, dailyRatesBefore: v}}))}
-                             />
-                             <DailyCostGrid 
-                               label="Compenso Autista (Durante)" values={params.driver.dailyRates}
-                               onChange={(v) => setParams(p => ({...p, driver: {...p.driver, dailyRates: v}}))}
-                             />
-                             <DailyCostGrid 
-                               label="Compenso Autista (Dopo)" values={params.driver.dailyRatesAfter} variant="after"
-                               onChange={(v) => setParams(p => ({...p, driver: {...p.driver, dailyRatesAfter: v}}))}
-                             />
-                          </div>
-
-                          {/* Van Rental */}
-                          <div className="space-y-4 pt-4 border-t border-slate-100">
-                             <h3 className="text-sm font-bold text-slate-800 flex items-center"><Bus className="w-4 h-4 mr-2 text-brand-500"/> Costi Mezzo (Van)</h3>
-                             <DailyCostGrid 
-                               label="Noleggio Van (Prima)" values={params.vanDailyRentalCostsBefore} variant="before"
-                               onChange={(v) => setParams(p => ({...p, vanDailyRentalCostsBefore: v}))}
-                             />
-                             <DailyCostGrid 
-                               label="Noleggio Van (Durante)" values={params.vanDailyRentalCosts}
-                               onChange={(v) => setParams(p => ({...p, vanDailyRentalCosts: v}))}
-                             />
-                             <DailyCostGrid 
-                               label="Noleggio Van (Dopo)" values={params.vanDailyRentalCostsAfter} variant="after"
-                               onChange={(v) => setParams(p => ({...p, vanDailyRentalCostsAfter: v}))}
-                             />
-                          </div>
-
-                           {/* Fuel */}
-                           <div className="space-y-4 pt-4 border-t border-slate-100">
-                             <h3 className="text-sm font-bold text-slate-800 flex items-center"><Fuel className="w-4 h-4 mr-2 text-brand-500"/> Carburante</h3>
-                             <DailyCostGrid 
-                               label="Carburante (Prima)" values={params.fuelDailyCostsBefore} variant="before"
-                               onChange={(v) => setParams(p => ({...p, fuelDailyCostsBefore: v}))}
-                             />
-                             <DailyCostGrid 
-                               label="Carburante (Durante)" values={params.fuelDailyCosts}
-                               onChange={(v) => setParams(p => ({...p, fuelDailyCosts: v}))}
-                             />
-                             <DailyCostGrid 
-                               label="Carburante (Dopo)" values={params.fuelDailyCostsAfter} variant="after"
-                               onChange={(v) => setParams(p => ({...p, fuelDailyCostsAfter: v}))}
-                             />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                 </SectionCard>
-                 
-                 {/* Section: Staff Accomodation & Meals */}
-                 {(params.hasGuide || params.hasDriver) && (
-                    <SectionCard title="Vitto e Alloggio Staff" icon={Utensils} defaultOpen={false}>
-                       {/* Meals */}
-                       <div className="space-y-4 mb-8">
+                       {params.guide.extraDaysBefore > 0 && (
                           <DailyCostGrid 
-                             label="Pasti Staff (Prima)" values={params.staffDailyLunchCostsBefore} variant="before"
-                             onChange={(v) => setParams(p => ({...p, staffDailyLunchCostsBefore: v}))}
+                            label="Compenso Guida (Giorni Prima)" 
+                            values={params.guide.dailyRatesBefore} 
+                            onChange={vals => setParams({...params, guide: {...params.guide, dailyRatesBefore: vals}})} 
+                            variant="before"
                           />
-                           <DailyCostGrid 
-                             label="Pasti Staff (Durante - Totale per persona)" values={params.staffDailyLunchCosts}
-                             onChange={(v) => setParams(p => ({...p, staffDailyLunchCosts: v}))}
-                          />
-                           <DailyCostGrid 
-                             label="Pasti Staff (Dopo)" values={params.staffDailyLunchCostsAfter} variant="after"
-                             onChange={(v) => setParams(p => ({...p, staffDailyLunchCostsAfter: v}))}
-                          />
-                       </div>
+                       )}
 
-                        {/* Accommodation */}
-                        <div className="space-y-4 pt-4 border-t border-slate-100">
-                           <h3 className="text-sm font-bold text-slate-800 flex items-center mb-4"><Hotel className="w-4 h-4 mr-2 text-brand-500"/> Alloggio Staff</h3>
-                           <DailyCostGrid 
-                             label="Hotel Staff (Prima)" values={params.staffDailyAccommodationCostsBefore} variant="before"
-                             onChange={(v) => setParams(p => ({...p, staffDailyAccommodationCostsBefore: v}))}
-                          />
-                           <DailyCostGrid 
-                             label="Hotel Staff (Durante)" values={params.staffDailyAccommodationCosts}
-                             onChange={(v) => setParams(p => ({...p, staffDailyAccommodationCosts: v}))}
-                          />
-                           <DailyCostGrid 
-                             label="Hotel Staff (Dopo)" values={params.staffDailyAccommodationCostsAfter} variant="after"
-                             onChange={(v) => setParams(p => ({...p, staffDailyAccommodationCostsAfter: v}))}
-                          />
-                        </div>
-                    </SectionCard>
-                 )}
+                       <DailyCostGrid 
+                         label="Compenso Guida (Durante il Tour)" 
+                         values={params.guide.dailyRates} 
+                         onChange={vals => setParams({...params, guide: {...params.guide, dailyRates: vals}})} 
+                         icon={User}
+                       />
 
-                 {/* Section: Costi Clienti */}
-                 <SectionCard title="Costi Variabili (Clienti)" icon={Users} defaultOpen={true}>
-                    
-                    {/* Hotel Stays Management */}
-                    <div className="mb-8">
-                       <div className="flex justify-between items-center mb-4">
-                         <h3 className="text-sm font-bold text-slate-500 uppercase flex items-center"><Hotel className="w-4 h-4 mr-2"/> Hotel & Soggiorni</h3>
-                         <button onClick={addHotelStay} className="text-xs font-bold text-brand-600 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg transition-colors flex items-center">
-                            <Plus className="w-3 h-3 mr-1" /> Aggiungi Hotel
-                         </button>
-                       </div>
-                       
-                       <div className="space-y-3">
-                         {params.hotelStays.map((stay, index) => {
-                           const startDay = currentDayCounter;
-                           const endDay = startDay + stay.nights - 1;
-                           currentDayCounter += stay.nights;
-                           
-                           return (
-                             <div key={stay.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm relative group animate-in slide-in-from-left-2 duration-300">
-                                <div className="absolute top-2 right-2">
-                                   <span className="text-[10px] font-mono bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-500">
-                                      Giorno {startDay} - {endDay}
-                                   </span>
-                                </div>
-                                
-                                {/* Row 1: Basic Info */}
-                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end mt-2">
-                                  <div className="md:col-span-5">
-                                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Hotel / Tappa {index + 1}</label>
-                                     <input 
-                                       type="text" 
-                                       value={stay.name} 
-                                       onChange={(e) => updateHotelStay(stay.id, 'name', e.target.value)}
-                                       placeholder="Nome Hotel"
-                                       className="block w-full rounded-lg border-slate-200 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                     />
-                                  </div>
-                                  <div className="md:col-span-2">
-                                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Notti</label>
-                                     <input 
-                                       type="number" 
-                                       min={1}
-                                       value={stay.nights} 
-                                       onChange={(e) => updateHotelStay(stay.id, 'nights', parseInt(e.target.value) || 0)}
-                                       className="block w-full rounded-lg border-slate-200 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                     />
-                                  </div>
-                                  <div className="md:col-span-2">
-                                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Costo / Notte</label>
-                                     <div className="relative">
-                                       <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                                         <span className="text-slate-400 text-xs">€</span>
-                                       </div>
-                                       <input 
-                                         type="number" 
-                                         min={0}
-                                         value={stay.costPerNight} 
-                                         onChange={(e) => updateHotelStay(stay.id, 'costPerNight', parseFloat(e.target.value) || 0)}
-                                         className="block w-full rounded-lg border-slate-200 pl-6 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                       />
-                                     </div>
-                                  </div>
-                                  <div className="md:col-span-2">
-                                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Suppl. DUS</label>
-                                     <div className="relative">
-                                       <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
-                                         <span className="text-slate-400 text-xs">€</span>
-                                       </div>
-                                       <input 
-                                         type="number" 
-                                         min={0}
-                                         value={stay.dusSupplement || 0} 
-                                         onChange={(e) => updateHotelStay(stay.id, 'dusSupplement', parseFloat(e.target.value) || 0)}
-                                         className="block w-full rounded-lg border-slate-200 pl-6 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                       />
-                                     </div>
-                                  </div>
-                                  <div className="md:col-span-1 flex justify-end pb-1.5">
-                                     <button 
-                                       onClick={() => removeHotelStay(stay.id)}
-                                       disabled={params.hotelStays.length === 1}
-                                       className="text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
-                                     >
-                                        <Trash2 className="w-5 h-5" />
-                                     </button>
-                                  </div>
-                                </div>
-
-                                {/* Row 2: Details */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-3 border-t border-slate-100/50">
-                                   <div>
-                                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 flex items-center">
-                                         <CreditCard className="w-3 h-3 mr-1" /> Condizioni Pagamento
-                                      </label>
-                                      <input 
-                                       type="text" 
-                                       value={stay.paymentTerms || ''} 
-                                       onChange={(e) => updateHotelStay(stay.id, 'paymentTerms', e.target.value)}
-                                       placeholder="Es. 30% acconto, saldo 30gg data arrivo"
-                                       className="block w-full rounded-lg border-slate-200 bg-white/50 text-xs focus:border-brand-500 focus:ring-brand-500 py-2"
-                                     />
-                                   </div>
-                                   <div>
-                                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1 flex items-center">
-                                         <FileText className="w-3 h-3 mr-1" /> Policy Cancellazione
-                                      </label>
-                                      <input 
-                                       type="text" 
-                                       value={stay.cancellationPolicy || ''} 
-                                       onChange={(e) => updateHotelStay(stay.id, 'cancellationPolicy', e.target.value)}
-                                       placeholder="Es. Gratuita fino a 30gg, poi 100%"
-                                       className="block w-full rounded-lg border-slate-200 bg-white/50 text-xs focus:border-brand-500 focus:ring-brand-500 py-2"
-                                     />
-                                   </div>
-                                </div>
-                             </div>
-                           );
-                         })}
-                       </div>
-
-                       {nightsMismatch && (
-                          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start text-amber-700 text-xs">
-                             <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
-                             <div>
-                                <strong>Attenzione:</strong> Il totale delle notti ({totalHotelNights}) non corrisponde alla durata del viaggio ({params.durationDays}).
-                                {totalHotelNights < params.durationDays ? ` Aggiungi ${params.durationDays - totalHotelNights} notti.` : ` Rimuovi ${totalHotelNights - params.durationDays} notti.`}
-                             </div>
-                          </div>
+                       {params.guide.extraDaysAfter > 0 && (
+                          <DailyCostGrid 
+                            label="Compenso Guida (Giorni Dopo)" 
+                            values={params.guide.dailyRatesAfter} 
+                            onChange={vals => setParams({...params, guide: {...params.guide, dailyRatesAfter: vals}})} 
+                            variant="after"
+                          />
                        )}
                     </div>
+                  )}
+                </div>
 
-                     <div className="mt-6 pt-6 border-t border-slate-100">
-                        <DailyCostGrid 
-                          label="Noleggio Bici" 
-                          values={params.bikeDailyRentalCosts} 
-                          onChange={(v) => setParams({...params, bikeDailyRentalCosts: v})}
-                          icon={Bike}
-                          helperText="Costo noleggio bici giornaliero per partecipante."
-                        />
+                {/* Driver Section */}
+                <div className="bg-indigo-50/30 p-5 rounded-2xl border border-indigo-100">
+                   <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold text-indigo-900 flex items-center"><Truck className="w-4 h-4 mr-2"/> Autista e Van</h3>
+                      <Toggle label="Includi" checked={params.hasDriver} onChange={v => setParams({...params, hasDriver: v})} />
+                   </div>
+
+                   {params.hasDriver && (
+                     <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <NumberInput label="Volo/Viaggio Autista" value={params.driver.travelCost} onChange={v => setParams({...params, driver: {...params.driver, travelCost: v}})} icon={User} />
+                          <NumberInput label="Giorni Prima" value={params.driver.extraDaysBefore} onChange={v => handleExtraDaysChange('driver', 'before', v)} icon={Clock} />
+                          <NumberInput label="Giorni Dopo" value={params.driver.extraDaysAfter} onChange={v => handleExtraDaysChange('driver', 'after', v)} icon={Clock} />
+                        </div>
+
+                        {/* Driver Fees */}
+                        {params.driver.extraDaysBefore > 0 && (
+                           <DailyCostGrid label="Compenso Autista (Prima)" values={params.driver.dailyRatesBefore} onChange={vals => setParams({...params, driver: {...params.driver, dailyRatesBefore: vals}})} variant="before" />
+                        )}
+                        <DailyCostGrid label="Compenso Autista (Tour)" values={params.driver.dailyRates} onChange={vals => setParams({...params, driver: {...params.driver, dailyRates: vals}})} />
+                        {params.driver.extraDaysAfter > 0 && (
+                           <DailyCostGrid label="Compenso Autista (Dopo)" values={params.driver.dailyRatesAfter} onChange={vals => setParams({...params, driver: {...params.driver, dailyRatesAfter: vals}})} variant="after" />
+                        )}
+
+                        <div className="h-px bg-indigo-200/50 my-6"></div>
+
+                        {/* Van Costs */}
+                        {params.driver.extraDaysBefore > 0 && (
+                           <DailyCostGrid label="Noleggio Van (Prima)" values={params.vanDailyRentalCostsBefore} onChange={vals => setParams({...params, vanDailyRentalCostsBefore: vals})} variant="before" icon={Bus} />
+                        )}
+                        <DailyCostGrid label="Noleggio Van (Tour)" values={params.vanDailyRentalCosts} onChange={vals => setParams({...params, vanDailyRentalCosts: vals})} icon={Bus} />
+                        {params.driver.extraDaysAfter > 0 && (
+                           <DailyCostGrid label="Noleggio Van (Dopo)" values={params.vanDailyRentalCostsAfter} onChange={vals => setParams({...params, vanDailyRentalCostsAfter: vals})} variant="after" icon={Bus} />
+                        )}
+
+                        {/* Fuel Costs */}
+                        {params.driver.extraDaysBefore > 0 && (
+                           <DailyCostGrid label="Carburante (Prima)" values={params.fuelDailyCostsBefore} onChange={vals => setParams({...params, fuelDailyCostsBefore: vals})} variant="before" icon={Fuel} />
+                        )}
+                        <DailyCostGrid label="Carburante (Tour)" values={params.fuelDailyCosts} onChange={vals => setParams({...params, fuelDailyCosts: vals})} icon={Fuel} />
+                        {params.driver.extraDaysAfter > 0 && (
+                           <DailyCostGrid label="Carburante (Dopo)" values={params.fuelDailyCostsAfter} onChange={vals => setParams({...params, fuelDailyCostsAfter: vals})} variant="after" icon={Fuel} />
+                        )}
                      </div>
-                 </SectionCard>
-              </div>
-              
-              {/* Right Column: Results - Sticky */}
-              <div className="lg:col-span-5 space-y-6 sticky top-24 h-fit">
-                 
-                 {/* Summary Card */}
-                 <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500 rounded-full blur-[80px] opacity-20 -mr-16 -mt-16 group-hover:opacity-30 transition-opacity duration-700"></div>
-                    <div className="relative z-10">
-                       <h3 className="text-sm font-medium text-brand-200 uppercase tracking-wider mb-2">Prezzo Consigliato</h3>
-                       <div className="text-5xl font-bold mb-1 tracking-tight">€{costs.suggestedPricePerPerson.toFixed(0)}</div>
-                       <div className="text-sm text-slate-400 mb-8">per persona</div>
+                   )}
+                </div>
 
-                       <div className="grid grid-cols-2 gap-8 border-t border-white/10 pt-6">
-                          <div>
-                             <div className="text-xs text-slate-400 uppercase tracking-wide mb-1">Costo Vivo</div>
-                             <div className="text-2xl font-semibold">€{costs.costPerPerson.toFixed(0)}</div>
-                          </div>
-                          <div>
-                             <div className="text-xs text-brand-300 uppercase tracking-wide mb-1">Profitto</div>
-                             <div className="text-2xl font-semibold text-brand-400">€{(costs.suggestedPricePerPerson - costs.costPerPerson).toFixed(0)}</div>
-                          </div>
-                       </div>
-                       
-                       <div className="mt-8 pt-6 border-t border-white/10 flex justify-between items-center group/be">
-                          <div>
-                             <div className="text-xs text-slate-400 uppercase tracking-wide mb-1 flex items-center">
-                               Break Even Point 
-                               <div className="relative ml-2">
-                                  <Info className="w-3.5 h-3.5 text-slate-500 cursor-help hover:text-white transition-colors" />
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-[10px] text-slate-200 rounded-lg shadow-xl opacity-0 invisible group-hover/be:opacity-100 group-hover/be:visible transition-all duration-200 pointer-events-none z-50 leading-relaxed border border-white/10">
-                                    Numero minimo di partecipanti necessario per coprire tutti i costi fissi e variabili senza andare in perdita.
-                                  </div>
-                               </div>
-                             </div>
-                             {costs.isBreakEvenImpossible ? (
-                                <div className="text-lg font-bold text-red-400 flex items-center"><AlertTriangle className="w-4 h-4 mr-2"/> Margine Negativo</div>
-                             ) : (
-                                <div className="text-2xl font-semibold text-white">{costs.breakEvenParticipants} <span className="text-sm font-normal text-slate-400">partecipanti</span></div>
-                             )}
-                          </div>
-                          {costs.breakEvenParticipants > params.participants && !costs.isBreakEvenImpossible && (
-                             <div className="text-xs text-amber-400 font-bold bg-amber-400/10 px-3 py-1.5 rounded-full border border-amber-400/20">
-                                <AlertTriangle className="w-3 h-3 inline mr-1"/> Sotto Soglia
-                             </div>
-                          )}
-                          {costs.breakEvenParticipants <= params.participants && !costs.isBreakEvenImpossible && (
-                             <div className="text-xs text-emerald-400 font-bold bg-emerald-400/10 px-3 py-1.5 rounded-full border border-emerald-400/20">
-                                <CheckCircle2 className="w-3 h-3 inline mr-1"/> Sostenibile
-                             </div>
-                          )}
-                       </div>
-                    </div>
-                 </div>
+                {/* Shared Staff Logistics (Meals/Hotel) */}
+                {(params.hasGuide || params.hasDriver) && (
+                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                      <h3 className="font-bold text-slate-800 mb-4 flex items-center"><Hotel className="w-4 h-4 mr-2"/> Vitto e Alloggio Staff</h3>
+                      
+                      <div className="space-y-6">
+                         {/* Accommodation */}
+                         <div>
+                            <p className="text-xs font-bold text-slate-500 mb-2 uppercase">Costo Alloggio Staff (Totale per persona)</p>
+                            {(params.guide.extraDaysBefore > 0 || params.driver.extraDaysBefore > 0) && (
+                               <DailyCostGrid label="Hotel Staff (Prima)" values={params.staffDailyAccommodationCostsBefore} onChange={vals => setParams({...params, staffDailyAccommodationCostsBefore: vals})} variant="before" />
+                            )}
+                            <DailyCostGrid label="Hotel Staff (Tour)" values={params.staffDailyAccommodationCosts} onChange={vals => setParams({...params, staffDailyAccommodationCosts: vals})} />
+                            {(params.guide.extraDaysAfter > 0 || params.driver.extraDaysAfter > 0) && (
+                               <DailyCostGrid label="Hotel Staff (Dopo)" values={params.staffDailyAccommodationCostsAfter} onChange={vals => setParams({...params, staffDailyAccommodationCostsAfter: vals})} variant="after" />
+                            )}
+                         </div>
 
-                 {/* Charts & Details */}
-                 <div className="bg-white rounded-2xl shadow-soft border border-slate-100 p-6">
-                    <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-6">Distribuzione Costi</h3>
-                    <CostChart costs={costs} />
-                 </div>
-
-                 {/* Detailed Table */}
-                 <div className="bg-white rounded-2xl shadow-soft border border-slate-100 overflow-hidden">
-                    <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                       <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Dettaglio Costi</h3>
-                       <div className="flex space-x-2">
-                           <button onClick={handleExportCSV} className="text-slate-600 hover:text-brand-700 text-xs font-bold flex items-center bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors">
-                              <Download className="w-3 h-3 mr-1.5" /> CSV
-                           </button>
-                           <button onClick={handleExportPDF} className="text-white hover:text-white text-xs font-bold flex items-center bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-lg transition-colors shadow-sm">
-                              <FileDown className="w-3 h-3 mr-1.5" /> PDF
-                           </button>
-                       </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                       <table className="w-full text-sm text-left">
-                          <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs">
-                             <tr>
-                                <th className="px-6 py-3">Voce</th>
-                                <th className="px-6 py-3 text-right">Totale</th>
-                             </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                             <tr className="bg-slate-50/50"><td className="px-6 py-2 font-bold text-xs text-slate-400 uppercase pt-4">Costi Fissi</td><td></td></tr>
-                             <tr><td className="px-6 py-3">Staff (Compensi)</td><td className="px-6 py-3 text-right font-medium">€{costs.fixedCosts.staffFees.toFixed(2)}</td></tr>
-                             <tr><td className="px-6 py-3">Staff (Viaggi)</td><td className="px-6 py-3 text-right font-medium">€{costs.fixedCosts.staffTravel.toFixed(2)}</td></tr>
-                             <tr><td className="px-6 py-3">Staff (Vitto/Alloggio)</td><td className="px-6 py-3 text-right font-medium">€{(costs.fixedCosts.staffAccommodation + costs.fixedCosts.staffLunch).toFixed(2)}</td></tr>
-                             <tr><td className="px-6 py-3">Van & Carburante</td><td className="px-6 py-3 text-right font-medium">€{(costs.fixedCosts.vanRental + costs.fixedCosts.fuel).toFixed(2)}</td></tr>
-                             
-                             <tr className="bg-slate-50/50"><td className="px-6 py-2 font-bold text-xs text-slate-400 uppercase pt-4">Costi Variabili</td><td></td></tr>
-                             <tr><td className="px-6 py-3">Alloggio Clienti</td><td className="px-6 py-3 text-right font-medium">€{costs.variableCosts.clientAccommodation.toFixed(2)}</td></tr>
-                             <tr><td className="px-6 py-3">Noleggio Bici</td><td className="px-6 py-3 text-right font-medium">€{costs.variableCosts.clientBike.toFixed(2)}</td></tr>
-                             
-                             <tr className="bg-slate-50 text-slate-900 font-bold">
-                                <td className="px-6 py-4">TOTALE VIAGGIO</td>
-                                <td className="px-6 py-4 text-right">€{costs.totalCost.toFixed(2)}</td>
-                             </tr>
-                          </tbody>
-                       </table>
-                    </div>
-                 </div>
-
-                 {/* AI Action Card */}
-                 <div className="bg-gradient-to-r from-brand-50 to-indigo-50 rounded-2xl p-6 border border-brand-100">
-                    <h3 className="text-brand-800 font-bold mb-2 flex items-center"><Sparkles className="w-4 h-4 mr-2"/> Assistente AI</h3>
-                    <p className="text-sm text-brand-600/80 mb-4">Genera una proposta commerciale o analizza i costi.</p>
-                    <button 
-                       onClick={handleGenerateProposal}
-                       disabled={isAiLoading}
-                       className="w-full py-3 bg-white text-brand-600 font-bold rounded-xl shadow-sm border border-brand-200 hover:bg-brand-50 hover:border-brand-300 transition-all mb-3 flex items-center justify-center"
-                    >
-                       {isAiLoading ? 'Generazione...' : 'Genera Bozza Preventivo'}
-                    </button>
-                 </div>
+                         {/* Meals */}
+                         <div>
+                            <p className="text-xs font-bold text-slate-500 mb-2 uppercase">Costo Pasti Staff (Totale per persona)</p>
+                            {(params.guide.extraDaysBefore > 0 || params.driver.extraDaysBefore > 0) && (
+                               <DailyCostGrid label="Pasti Staff (Prima)" values={params.staffDailyLunchCostsBefore} onChange={vals => setParams({...params, staffDailyLunchCostsBefore: vals})} variant="before" icon={Utensils} />
+                            )}
+                            <DailyCostGrid label="Pasti Staff (Tour)" values={params.staffDailyLunchCosts} onChange={vals => setParams({...params, staffDailyLunchCosts: vals})} icon={Utensils} />
+                            {(params.guide.extraDaysAfter > 0 || params.driver.extraDaysAfter > 0) && (
+                               <DailyCostGrid label="Pasti Staff (Dopo)" values={params.staffDailyLunchCostsAfter} onChange={vals => setParams({...params, staffDailyLunchCostsAfter: vals})} variant="after" icon={Utensils} />
+                            )}
+                         </div>
+                      </div>
+                   </div>
+                )}
 
               </div>
-           </div>
-         ) : (
-           /* Tab: Proposal / AI Output */
-           <div className="max-w-4xl mx-auto animate-in fade-in zoom-in-95 duration-300">
-              <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
-                 <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-slate-800 flex items-center">
-                       <Sparkles className="w-5 h-5 mr-2 text-brand-500"/> Risultato Generato
-                    </h2>
-                    {aiContent && (
-                       <button className="text-slate-500 hover:text-brand-600 transition-colors" onClick={() => navigator.clipboard.writeText(aiContent)}>
-                          <span className="text-xs font-bold uppercase tracking-wider">Copia Testo</span>
+            </SectionCard>
+
+            {/* Client Costs */}
+            <SectionCard title="Costi Clienti (Hotel & Bici)" icon={Hotel}>
+               <div className="space-y-8">
+                  
+                  {/* HOTEL MANAGEMENT */}
+                  <div className="space-y-4">
+                     <div className="flex items-center justify-between">
+                       <h3 className="text-sm font-bold text-slate-800 uppercase flex items-center"><Hotel className="w-4 h-4 mr-2"/> Hotel</h3>
+                       <button 
+                         onClick={() => {
+                            const currentNights = params.hotelStays.reduce((acc, s) => acc + s.nights, 0);
+                            if (currentNights < params.durationDays) {
+                               const newItem: HotelStay = {
+                                  id: Date.now().toString(),
+                                  name: "Nuovo Hotel",
+                                  nights: params.durationDays - currentNights,
+                                  costPerNight: 90,
+                                  paymentTerms: "",
+                                  cancellationPolicy: "",
+                                  dusSupplement: 0
+                               };
+                               setParams({...params, hotelStays: [...params.hotelStays, newItem]});
+                            } else {
+                               alert("Hai già coperto tutti i giorni del tour!");
+                            }
+                         }}
+                         className="text-xs flex items-center bg-brand-50 text-brand-700 px-3 py-1.5 rounded-lg font-bold hover:bg-brand-100 transition-colors"
+                       >
+                         <Plus className="w-3 h-3 mr-1" /> Aggiungi Hotel
                        </button>
-                    )}
-                 </div>
-                 <div className="p-8 min-h-[400px]">
-                    {isAiLoading ? (
-                       <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-500 mb-4"></div>
-                          <p className="animate-pulse">L'IA sta elaborando i dati...</p>
-                       </div>
-                    ) : aiContent ? (
-                       <div className="prose prose-slate max-w-none prose-headings:text-brand-800 prose-a:text-brand-600">
-                          <ReactMarkdown>{aiContent}</ReactMarkdown>
-                       </div>
-                    ) : (
-                       <div className="text-center py-20">
-                          <div className="bg-slate-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
-                             <Sparkles className="w-8 h-8" />
+                     </div>
+
+                     {params.hotelStays.map((stay, index) => {
+                        // Calculate day range for display
+                        let startDay = 1;
+                        for (let i = 0; i < index; i++) startDay += params.hotelStays[i].nights;
+                        let endDay = startDay + stay.nights - 1;
+
+                        return (
+                        <div key={stay.id} className="bg-rose-50/50 p-4 rounded-xl border border-rose-100 relative group animate-in fade-in zoom-in-95">
+                           <div className="absolute top-4 right-4 flex space-x-2">
+                              <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-1 rounded">
+                                 G{startDay} - G{endDay}
+                              </span>
+                              {params.hotelStays.length > 1 && (
+                                <button onClick={() => {
+                                   const filtered = params.hotelStays.filter(h => h.id !== stay.id);
+                                   setParams({...params, hotelStays: filtered});
+                                }} className="text-rose-400 hover:text-rose-600">
+                                   <X className="w-4 h-4" />
+                                </button>
+                              )}
+                           </div>
+
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                              <div>
+                                 <label className="text-[10px] font-bold text-slate-500 uppercase">Nome Hotel</label>
+                                 <input 
+                                    type="text" 
+                                    value={stay.name}
+                                    onChange={(e) => {
+                                       const newStays = [...params.hotelStays];
+                                       newStays[index].name = e.target.value;
+                                       setParams({...params, hotelStays: newStays});
+                                    }}
+                                    className="w-full text-sm font-bold bg-white border-slate-200 rounded-lg"
+                                 />
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                 <div>
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase">Notti</label>
+                                    <input 
+                                       type="number" 
+                                       value={stay.nights}
+                                       min={1}
+                                       onChange={(e) => {
+                                          const val = parseInt(e.target.value) || 1;
+                                          const newStays = [...params.hotelStays];
+                                          newStays[index].nights = val;
+                                          setParams({...params, hotelStays: newStays});
+                                       }}
+                                       className="w-full text-sm bg-white border-slate-200 rounded-lg"
+                                    />
+                                 </div>
+                                 <div>
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase">Costo/Notte</label>
+                                    <div className="relative">
+                                       <span className="absolute left-2 top-2 text-slate-400 text-xs">€</span>
+                                       <input 
+                                          type="number" 
+                                          value={stay.costPerNight}
+                                          onChange={(e) => {
+                                             const val = parseFloat(e.target.value) || 0;
+                                             const newStays = [...params.hotelStays];
+                                             newStays[index].costPerNight = val;
+                                             setParams({...params, hotelStays: newStays});
+                                          }}
+                                          className="w-full text-sm bg-white border-slate-200 rounded-lg pl-6"
+                                       />
+                                    </div>
+                                 </div>
+                              </div>
+                           </div>
+                           
+                           {/* Details Collapse */}
+                           <div className="mt-2 pt-2 border-t border-rose-100 grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div>
+                                 <label className="text-[10px] font-bold text-slate-400 uppercase">Pagamento</label>
+                                 <input type="text" placeholder="es. 30% acconto" className="w-full text-xs bg-white/50 border-slate-200 rounded" 
+                                    value={stay.paymentTerms}
+                                    onChange={e => {
+                                       const ns = [...params.hotelStays]; ns[index].paymentTerms = e.target.value; setParams({...params, hotelStays: ns});
+                                    }}
+                                 />
+                              </div>
+                              <div>
+                                 <label className="text-[10px] font-bold text-slate-400 uppercase">Cancellazione</label>
+                                 <input type="text" placeholder="es. 15gg prima" className="w-full text-xs bg-white/50 border-slate-200 rounded"
+                                    value={stay.cancellationPolicy}
+                                    onChange={e => {
+                                       const ns = [...params.hotelStays]; ns[index].cancellationPolicy = e.target.value; setParams({...params, hotelStays: ns});
+                                    }}
+                                 />
+                              </div>
+                              <div>
+                                 <label className="text-[10px] font-bold text-slate-400 uppercase">Suppl. DUS</label>
+                                 <div className="relative">
+                                    <span className="absolute left-2 top-1.5 text-slate-400 text-[10px]">€</span>
+                                    <input type="number" className="w-full text-xs bg-white/50 border-slate-200 rounded pl-5"
+                                       value={stay.dusSupplement}
+                                       onChange={e => {
+                                          const ns = [...params.hotelStays]; ns[index].dusSupplement = parseFloat(e.target.value)||0; setParams({...params, hotelStays: ns});
+                                       }}
+                                    />
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+                     )})}
+                     
+                     {/* Total Check */}
+                     <div className="flex justify-end">
+                        {params.hotelStays.reduce((a,b)=>a+b.nights,0) !== params.durationDays && (
+                           <span className="text-xs text-red-500 font-bold flex items-center">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Totale notti hotel ({params.hotelStays.reduce((a,b)=>a+b.nights,0)}) diverso dalla durata ({params.durationDays})
+                           </span>
+                        )}
+                     </div>
+                  </div>
+
+                  <div className="h-px bg-slate-200 my-6"></div>
+
+                  {/* BIKES */}
+                  <DailyCostGrid 
+                     label="Noleggio Bici Clienti (Costo giornaliero)" 
+                     values={params.bikeDailyRentalCosts} 
+                     onChange={vals => setParams({...params, bikeDailyRentalCosts: vals})} 
+                     icon={Bike}
+                  />
+
+               </div>
+            </SectionCard>
+          </div>
+
+          {/* Right Column: Results - Sticky */}
+          <div className="xl:col-span-5 space-y-6 sticky top-24">
+            
+            {/* Price Card */}
+            <div className="bg-slate-900 text-white p-8 rounded-3xl shadow-2xl relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2 group-hover:opacity-30 transition-opacity"></div>
+              <div className="absolute bottom-0 left-0 w-64 h-64 bg-accent-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 translate-y-1/2 -translate-x-1/2 group-hover:opacity-30 transition-opacity"></div>
+              
+              <div className="relative z-10">
+                <h3 className="text-brand-200 text-xs font-bold uppercase tracking-widest mb-1">Prezzo Consigliato</h3>
+                <div className="flex items-baseline mb-6">
+                  <span className="text-6xl font-black tracking-tighter">€{costs.suggestedPricePerPerson.toFixed(0)}</span>
+                  <span className="ml-2 text-slate-400 font-medium">per persona</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                   <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm">
+                      <span className="block text-[10px] text-slate-400 uppercase font-bold">Costo Vivo</span>
+                      <span className="block text-xl font-bold">€{costs.costPerPerson.toFixed(0)}</span>
+                   </div>
+                   <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm">
+                      <span className="block text-[10px] text-brand-300 uppercase font-bold">Profitto</span>
+                      <span className="block text-xl font-bold text-brand-300">€{costs.totalProfit.toFixed(0)}</span>
+                   </div>
+                </div>
+
+                <div className="border-t border-white/10 pt-4 flex items-center justify-between">
+                   <div className="flex items-center group/tooltip relative">
+                      <span className="text-xs font-medium text-slate-400 mr-2">BREAK EVEN POINT</span>
+                      <Info className="w-3.5 h-3.5 text-slate-500 cursor-help" />
+                      
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-slate-800 text-slate-200 text-xs rounded-lg shadow-xl opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-50">
+                         Il numero minimo di partecipanti per coprire i costi fissi (Guida, Van, Staff). Sotto questo numero, vai in perdita.
+                      </div>
+                   </div>
+                   <div className={`flex items-center px-3 py-1 rounded-full text-xs font-bold ${costs.isBreakEvenImpossible || costs.breakEvenParticipants > params.participants ? 'bg-red-500/20 text-red-300' : 'bg-green-500/20 text-green-300'}`}>
+                      {costs.isBreakEvenImpossible ? (
+                        <span className="flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Impossibile</span>
+                      ) : (
+                        <span className="flex items-center">
+                           <Users className="w-3 h-3 mr-1"/> 
+                           <span className="text-lg mr-1">{costs.breakEvenParticipants}</span> partecipanti
+                        </span>
+                      )}
+                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Chart Card */}
+            <div className="bg-white p-6 rounded-2xl shadow-soft border border-slate-100">
+              <h3 className="text-sm font-bold text-slate-800 uppercase mb-6">Distribuzione Costi</h3>
+              <CostChart costs={costs} />
+            </div>
+
+            {/* Actions */}
+            <div className="grid grid-cols-2 gap-4">
+               <button 
+                 onClick={handleExportCSV}
+                 className="flex items-center justify-center px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition-all"
+               >
+                 <Download className="w-4 h-4 mr-2" /> CSV
+               </button>
+               <button 
+                 onClick={handleExportPDF}
+                 className="flex items-center justify-center px-4 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold transition-all shadow-lg shadow-rose-500/30"
+               >
+                 <FileDown className="w-4 h-4 mr-2" /> PDF
+               </button>
+            </div>
+
+          </div>
+        </div>
+        ) : (
+          /* AI Proposal Tab */
+          <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4">
+             <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
+                <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
+                   <div className="flex items-center">
+                      <div className="bg-brand-100 p-2 rounded-lg mr-4">
+                         <Sparkles className="w-6 h-6 text-brand-600" />
+                      </div>
+                      <div>
+                         <h2 className="text-2xl font-bold text-slate-900">Assistente IA</h2>
+                         <p className="text-slate-500">Genera contenuti intelligenti per il tuo viaggio</p>
+                      </div>
+                   </div>
+                   <div className="flex space-x-2">
+                      <button onClick={handleGenerateProposal} className="px-4 py-2 bg-brand-50 text-brand-700 rounded-lg text-sm font-bold hover:bg-brand-100">Genera Proposta</button>
+                      <button onClick={handleAnalyzeCosts} className="px-4 py-2 bg-slate-50 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-100">Analizza Costi</button>
+                   </div>
+                </div>
+
+                {isAiLoading ? (
+                   <div className="py-20 text-center">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-brand-500 border-t-transparent mb-4"></div>
+                      <p className="text-slate-500">L'IA sta elaborando i tuoi dati...</p>
+                   </div>
+                ) : (
+                   <div className="prose prose-slate max-w-none">
+                      <ReactMarkdown>{aiContent || "Seleziona un'azione per iniziare."}</ReactMarkdown>
+                   </div>
+                )}
+             </div>
+          </div>
+        )}
+      </main>
+
+      {/* Save/Load Modal */}
+      {showSavesModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                 <h3 className="font-bold text-lg">I Miei Viaggi</h3>
+                 <button onClick={() => setShowSavesModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+              </div>
+              <div className="p-2 max-h-96 overflow-y-auto">
+                 {savedTrips.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400">
+                       <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                       <p>Nessun viaggio salvato</p>
+                    </div>
+                 ) : (
+                    <div className="space-y-1">
+                       {savedTrips.map(trip => (
+                          <div key={trip.id} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg group">
+                             <div onClick={() => handleLoadTrip(trip)} className="cursor-pointer flex-grow">
+                                <p className="font-bold text-slate-800">{trip.name}</p>
+                                <p className="text-xs text-slate-500">{trip.date} • {trip.params.participants} pax</p>
+                             </div>
+                             <button onClick={() => handleDeleteTrip(trip.id)} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                                <Trash2 className="w-4 h-4" />
+                             </button>
                           </div>
-                          <h3 className="text-slate-900 font-medium mb-2">Nessun contenuto generato</h3>
-                          <p className="text-slate-500 text-sm max-w-sm mx-auto mb-6">Usa i pulsanti nella dashboard per generare una proposta o un'analisi dei costi.</p>
-                          <button onClick={() => setActiveTab('calc')} className="text-brand-600 font-bold hover:underline text-sm">Torna alla Configurazione</button>
-                       </div>
-                    )}
+                       ))}
+                    </div>
+                 )}
+              </div>
+              <div className="p-4 border-t border-slate-100 bg-slate-50 grid grid-cols-2 gap-3">
+                 <button onClick={handleSaveTrip} className="flex items-center justify-center px-4 py-2 bg-brand-600 text-white rounded-lg font-bold text-sm hover:bg-brand-700">
+                    <Save className="w-4 h-4 mr-2" /> Salva Corrente
+                 </button>
+                 <div className="flex space-x-2">
+                    <button onClick={handleExportBackup} className="flex-1 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100" title="Esporta Backup">
+                        <Download className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => fileInputRef.current?.click()} className="flex-1 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100" title="Importa Backup">
+                        <Upload className="w-4 h-4" />
+                    </button>
+                    <input type="file" ref={fileInputRef} onChange={handleImportBackup} className="hidden" accept=".json" />
                  </div>
               </div>
            </div>
-         )}
-
-      </main>
+        </div>
+      )}
     </div>
   );
 };
