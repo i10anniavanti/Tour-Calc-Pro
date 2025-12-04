@@ -1341,9 +1341,13 @@ export const App: React.FC = () => {
                                 <div className="flex items-center">
                                    <p className="font-bold text-slate-800 mr-2">{trip.name}</p>
                                    {trip.isCloud ? (
-                                     <Cloud className="w-3 h-3 text-green-500" title="Salvato in Cloud" />
+                                     <span title="Salvato in Cloud">
+                                       <Cloud className="w-3 h-3 text-green-500" />
+                                     </span>
                                    ) : (
-                                     <CloudOff className="w-3 h-3 text-slate-300" title="Salvato in Locale" />
+                                     <span title="Salvato in Locale">
+                                       <CloudOff className="w-3 h-3 text-slate-300" />
+                                     </span>
                                    )}
                                 </div>
                                 <p className="text-xs text-slate-500">{trip.date} • {trip.params.participants} pax</p>
