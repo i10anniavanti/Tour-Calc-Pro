@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Users, Calendar, User, Bus, Truck, Hotel, Bike, DollarSign, 
@@ -5,12 +6,13 @@ import {
   Fuel, Utensils, Download, Save, FolderOpen, Trash2, X,
   ArrowRight, Info, CheckCircle2, AlertCircle, Clock, Plus, Minus,
   CreditCard, FileText, ChevronDown, ChevronUp, Copy, FileDown,
-  Upload, FileJson
+  Upload, FileJson, Cloud, CloudOff, RefreshCw
 } from 'lucide-react';
 import { TripParams, CostBreakdown, HotelStay } from './types';
 import { NumberInput, Toggle } from './components/InputSection';
 import { CostChart } from './components/CostChart';
 import { generateTripProposal, analyzeCostsAI } from './services/geminiService';
+import { supabase, saveTripToCloud, getTripsFromCloud, deleteTripFromCloud, CloudTrip } from './services/supabaseClient';
 import ReactMarkdown from 'react-markdown';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -93,6 +95,7 @@ interface SavedTrip {
   name: string;
   date: string;
   params: TripParams;
+  isCloud?: boolean; // Flag per distinguere la provenienza
 }
 
 interface DailyCostGridProps {
@@ -221,40 +224,71 @@ export const App: React.FC = () => {
   const [savedTrips, setSavedTrips] = useState<SavedTrip[]>([]);
   const [showSavesModal, setShowSavesModal] = useState(false);
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
+  const [isCloudEnabled, setIsCloudEnabled] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [unsavedChanges, setUnsavedChanges] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load saved trips on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('tourCalc_saves');
-    if (saved) {
-      try {
-        setSavedTrips(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse saved trips", e);
-      }
+  // Load trips logic
+  const loadTrips = async () => {
+    setIsSyncing(true);
+    // 1. Load Local
+    const localSaved = localStorage.getItem('tourCalc_saves');
+    let localTrips: SavedTrip[] = [];
+    if (localSaved) {
+      try { localTrips = JSON.parse(localSaved); } catch (e) {}
     }
+
+    // 2. Load Cloud (if available)
+    if (supabase) {
+      setIsCloudEnabled(true);
+      const cloudData = await getTripsFromCloud();
+      const cloudTrips: SavedTrip[] = cloudData.map(t => ({
+        id: t.id,
+        name: t.name,
+        date: new Date(t.created_at).toLocaleDateString(),
+        params: t.trip_data,
+        isCloud: true
+      }));
+      // Merge: Cloud vince su local per visualizzazione
+      setSavedTrips([...cloudTrips, ...localTrips.filter(l => !l.isCloud)]); // Semplificazione: mostra entrambi se diversi
+    } else {
+      setSavedTrips(localTrips);
+    }
+    setIsSyncing(false);
+  };
+
+  useEffect(() => {
+    loadTrips();
     
     // Check for auto-save
     const autoSaved = localStorage.getItem('tourCalc_autosave');
     if (autoSaved) {
       try {
          const parsed = JSON.parse(autoSaved);
-         if (window.confirm("Trovata una sessione precedente salvata automaticamente. Vuoi ripristinarla?")) {
-            setParams(parsed);
+         // Piccola logica: chiediamo solo se non è il default
+         if (parsed.tripName !== initialParams.tripName) {
+             if (window.confirm("Trovata una sessione precedente salvata automaticamente. Vuoi ripristinarla?")) {
+                setParams(parsed);
+             }
          }
       } catch(e) {}
     }
   }, []);
 
-  // Auto-save logic
+  // Auto-save logic (Local only for safety)
   useEffect(() => {
     const interval = setInterval(() => {
        localStorage.setItem('tourCalc_autosave', JSON.stringify(params));
        setLastAutoSave(new Date());
     }, 30000); // 30 seconds
-
     return () => clearInterval(interval);
+  }, [params]);
+
+  // Track unsaved changes
+  useEffect(() => {
+     setUnsavedChanges(true);
   }, [params]);
 
   const handleDurationChange = (newDuration: number) => {
@@ -494,28 +528,56 @@ export const App: React.FC = () => {
     setIsAiLoading(false);
   };
 
-  const handleSaveTrip = () => {
-    const newTrip: SavedTrip = {
-      id: Date.now().toString(),
-      name: params.tripName || "Viaggio Senza Nome",
-      date: new Date().toLocaleDateString(),
-      params: params
-    };
-    const updated = [newTrip, ...savedTrips];
-    setSavedTrips(updated);
-    localStorage.setItem('tourCalc_saves', JSON.stringify(updated));
-    alert('Viaggio salvato con successo!');
+  const handleSaveTrip = async () => {
+    setIsSyncing(true);
+    
+    try {
+      if (isCloudEnabled) {
+        // Save to Cloud
+        await saveTripToCloud(params.tripName || "Viaggio Senza Nome", params);
+        alert('Viaggio salvato nel CLOUD con successo!');
+      } else {
+        // Save to Local
+        const newTrip: SavedTrip = {
+          id: Date.now().toString(),
+          name: params.tripName || "Viaggio Senza Nome",
+          date: new Date().toLocaleDateString(),
+          params: params
+        };
+        const updated = [newTrip, ...savedTrips.filter(t => !t.isCloud)];
+        setSavedTrips(updated);
+        localStorage.setItem('tourCalc_saves', JSON.stringify(updated));
+        alert('Viaggio salvato in LOCALE (Browser)!');
+      }
+      setUnsavedChanges(false);
+      loadTrips(); // Reload list
+    } catch (e) {
+      console.error(e);
+      alert('Errore nel salvataggio: ' + e);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleLoadTrip = (saved: SavedTrip) => {
     setParams(saved.params);
     setShowSavesModal(false);
+    setUnsavedChanges(false);
   };
 
-  const handleDeleteTrip = (id: string) => {
-    const updated = savedTrips.filter(t => t.id !== id);
-    setSavedTrips(updated);
-    localStorage.setItem('tourCalc_saves', JSON.stringify(updated));
+  const handleDeleteTrip = async (id: string, isCloud?: boolean) => {
+    if(!window.confirm("Sei sicuro di voler eliminare questo viaggio?")) return;
+    
+    setIsSyncing(true);
+    if (isCloud && isCloudEnabled) {
+      await deleteTripFromCloud(id);
+    } else {
+      const updated = savedTrips.filter(t => t.id !== id);
+      setSavedTrips(updated);
+      localStorage.setItem('tourCalc_saves', JSON.stringify(updated));
+    }
+    loadTrips();
+    setIsSyncing(false);
   };
 
   const handleExportBackup = () => {
@@ -526,6 +588,7 @@ export const App: React.FC = () => {
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
+    setUnsavedChanges(false);
   };
 
   const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -539,18 +602,13 @@ export const App: React.FC = () => {
           const content = e.target?.result as string;
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
-            if (parsed.length > 0 && !parsed[0].params) {
-              throw new Error("Formato non valido");
-            }
-            if (window.confirm(`Trovati ${parsed.length} viaggi nel backup. Vuoi sovrascrivere i salvataggi esistenti? (Clicca Annulla per unire)`)) {
-               setSavedTrips(parsed);
-               localStorage.setItem('tourCalc_saves', JSON.stringify(parsed));
-            } else {
-               const merged = [...parsed, ...savedTrips];
-               const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-               setSavedTrips(unique);
-               localStorage.setItem('tourCalc_saves', JSON.stringify(unique));
-            }
+            // Filter out existing local IDs to avoid duplicates if needed, or just append
+            const currentLocal = savedTrips.filter(t => !t.isCloud);
+            const merged = [...parsed, ...currentLocal];
+            const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
+            
+            setSavedTrips(unique);
+            localStorage.setItem('tourCalc_saves', JSON.stringify(unique));
             alert("Importazione completata!");
           } else {
              alert("Il file non contiene una lista valida di viaggi.");
@@ -610,11 +668,9 @@ export const App: React.FC = () => {
 
   const handleExportPDF = () => {
     const doc = new jsPDF();
-    // Explicit Tuple Type Definition for jsPDF to avoid TS Errors
-    const primaryColor: [number, number, number] = [109, 40, 217]; // Brand 700
-    const secondaryColor: [number, number, number] = [245, 243, 255]; // Brand 50
+    const primaryColor: [number, number, number] = [109, 40, 217];
+    const secondaryColor: [number, number, number] = [245, 243, 255];
 
-    // Header
     doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.rect(0, 0, 210, 24, 'F');
     doc.setTextColor(255, 255, 255);
@@ -625,7 +681,6 @@ export const App: React.FC = () => {
     doc.setFont("helvetica", "normal");
     doc.text("Preventivo Dettagliato", 200, 15, { align: 'right' });
     
-    // Info Viaggio Box
     doc.setDrawColor(200, 200, 200);
     doc.setFillColor(255, 255, 255);
     doc.rect(14, 30, 182, 25, 'FD'); 
@@ -643,7 +698,6 @@ export const App: React.FC = () => {
 
     let finalY = 60;
 
-    // --- TABELLA 1: DETTAGLIO STAFF ---
     if (params.hasGuide || params.hasDriver) {
         const staffBody = [];
         
@@ -677,7 +731,6 @@ export const App: React.FC = () => {
         finalY = doc.lastAutoTable.finalY + 10;
     }
 
-    // --- TABELLA 2: LOGISTICA & VITTO STAFF ---
     const logBody = [
         ["Noleggio Van", `Totale per ${(params.hasDriver ? params.durationDays + params.driver.extraDaysBefore + params.driver.extraDaysAfter : 0)} giorni`, `€${costs.fixedCosts.vanRental.toFixed(2)}`],
         ["Carburante", "Stima Totale", `€${costs.fixedCosts.fuel.toFixed(2)}`],
@@ -690,13 +743,12 @@ export const App: React.FC = () => {
         head: [['Voce Logistica', 'Note', 'Costo']],
         body: logBody,
         theme: 'grid',
-        headStyles: { fillColor: [139, 92, 246], textColor: 255 }, // Violet-500
+        headStyles: { fillColor: [139, 92, 246], textColor: 255 }, 
         styles: { fontSize: 9 }
     });
     // @ts-ignore
     finalY = doc.lastAutoTable.finalY + 10;
 
-    // --- TABELLA 3: HOTEL CLIENTI ---
     const hotelBody = params.hotelStays.map(h => [
         h.name,
         `${h.nights} notti`,
@@ -710,21 +762,19 @@ export const App: React.FC = () => {
         head: [['Hotel', 'Durata', 'Costo/Notte (Pax)', 'Totale Gruppo']],
         body: hotelBody,
         theme: 'grid',
-        headStyles: { fillColor: [244, 63, 94], textColor: 255 }, // Rose-500
+        headStyles: { fillColor: [244, 63, 94], textColor: 255 },
         styles: { fontSize: 9 }
     });
     // @ts-ignore
     finalY = doc.lastAutoTable.finalY + 15;
 
-    // --- TABELLA 4: RIEPILOGO FINALE ---
-    // Check if we need new page
     if (finalY > 240) {
         doc.addPage();
         finalY = 20;
     }
 
-    doc.setFillColor(245, 243, 255); // Brand 50
-    doc.setDrawColor(109, 40, 217); // Brand 700
+    doc.setFillColor(245, 243, 255); 
+    doc.setDrawColor(109, 40, 217); 
     doc.rect(120, finalY, 80, 50, 'FD');
 
     doc.setFontSize(12);
@@ -759,16 +809,24 @@ export const App: React.FC = () => {
               <h1 className="text-xl font-bold tracking-tight">TourCalc Pro</h1>
               <div className="flex items-center space-x-2 text-xs text-brand-200">
                 <span className="opacity-80">PROFESSIONAL PLANNING TOOL</span>
-                {lastAutoSave && (
-                   <span className="flex items-center bg-white/10 px-1.5 py-0.5 rounded text-[10px] animate-pulse">
-                     <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1"></span>
-                     SALVATAGGIO AUTO
-                   </span>
+                {isCloudEnabled ? (
+                  <span className="flex items-center bg-green-500/20 px-1.5 py-0.5 rounded text-[10px] text-green-200 border border-green-500/30">
+                    <Cloud className="w-3 h-3 mr-1" /> CLOUD ACTIVE
+                  </span>
+                ) : (
+                  <span className="flex items-center bg-slate-500/30 px-1.5 py-0.5 rounded text-[10px] text-slate-300">
+                    <CloudOff className="w-3 h-3 mr-1" /> LOCAL MODE
+                  </span>
                 )}
               </div>
             </div>
           </div>
           <div className="flex items-center space-x-3">
+             {unsavedChanges && (
+                <span className="text-xs text-amber-300 animate-pulse font-medium hidden sm:inline-block">
+                   ⚠ Modifiche non salvate
+                </span>
+             )}
             <button 
               onClick={() => setShowSavesModal(true)}
               className="flex items-center px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-all"
@@ -790,7 +848,7 @@ export const App: React.FC = () => {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        {/* Navigation Tabs (Mobile only mainly) */}
+        {/* Navigation Tabs */}
         <div className="flex justify-center mb-8 bg-white p-1 rounded-xl shadow-sm border border-slate-100 w-fit mx-auto">
            <button
              onClick={() => setActiveTab('calc')}
@@ -1258,8 +1316,19 @@ export const App: React.FC = () => {
                  <h3 className="font-bold text-lg">I Miei Viaggi</h3>
                  <button onClick={() => setShowSavesModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
               </div>
+              
+              {/* Cloud Status */}
+              <div className={`px-6 py-2 text-xs font-bold text-center border-b ${isCloudEnabled ? 'bg-green-50 text-green-700 border-green-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}>
+                 {isCloudEnabled ? "CLOUD SYNC ATTIVO" : "MODALITÀ LOCALE (Configura Supabase per il Cloud)"}
+              </div>
+
               <div className="p-2 max-h-96 overflow-y-auto">
-                 {savedTrips.length === 0 ? (
+                 {isSyncing ? (
+                    <div className="p-8 text-center text-slate-400">
+                       <RefreshCw className="w-8 h-8 mx-auto mb-2 animate-spin" />
+                       <p>Sincronizzazione...</p>
+                    </div>
+                 ) : savedTrips.length === 0 ? (
                     <div className="p-8 text-center text-slate-400">
                        <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-20" />
                        <p>Nessun viaggio salvato</p>
@@ -1269,10 +1338,17 @@ export const App: React.FC = () => {
                        {savedTrips.map(trip => (
                           <div key={trip.id} className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg group">
                              <div onClick={() => handleLoadTrip(trip)} className="cursor-pointer flex-grow">
-                                <p className="font-bold text-slate-800">{trip.name}</p>
+                                <div className="flex items-center">
+                                   <p className="font-bold text-slate-800 mr-2">{trip.name}</p>
+                                   {trip.isCloud ? (
+                                     <Cloud className="w-3 h-3 text-green-500" title="Salvato in Cloud" />
+                                   ) : (
+                                     <CloudOff className="w-3 h-3 text-slate-300" title="Salvato in Locale" />
+                                   )}
+                                </div>
                                 <p className="text-xs text-slate-500">{trip.date} • {trip.params.participants} pax</p>
                              </div>
-                             <button onClick={() => handleDeleteTrip(trip.id)} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                             <button onClick={() => handleDeleteTrip(trip.id, trip.isCloud)} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
                                 <Trash2 className="w-4 h-4" />
                              </button>
                           </div>
@@ -1281,14 +1357,14 @@ export const App: React.FC = () => {
                  )}
               </div>
               <div className="p-4 border-t border-slate-100 bg-slate-50 grid grid-cols-2 gap-3">
-                 <button onClick={handleSaveTrip} className="flex items-center justify-center px-4 py-2 bg-brand-600 text-white rounded-lg font-bold text-sm hover:bg-brand-700">
+                 <button onClick={handleSaveTrip} disabled={isSyncing} className="flex items-center justify-center px-4 py-2 bg-brand-600 text-white rounded-lg font-bold text-sm hover:bg-brand-700 disabled:opacity-50">
                     <Save className="w-4 h-4 mr-2" /> Salva Corrente
                  </button>
                  <div className="flex space-x-2">
-                    <button onClick={handleExportBackup} className="flex-1 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100" title="Esporta Backup">
+                    <button onClick={handleExportBackup} className="flex-1 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100" title="Esporta Backup JSON">
                         <Download className="w-4 h-4" />
                     </button>
-                    <button onClick={() => fileInputRef.current?.click()} className="flex-1 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100" title="Importa Backup">
+                    <button onClick={() => fileInputRef.current?.click()} className="flex-1 flex items-center justify-center bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-100" title="Importa Backup JSON">
                         <Upload className="w-4 h-4" />
                     </button>
                     <input type="file" ref={fileInputRef} onChange={handleImportBackup} className="hidden" accept=".json" />
