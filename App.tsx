@@ -4,7 +4,7 @@ import {
   Calculator, Sparkles, TrendingUp, Briefcase, AlertTriangle, 
   Fuel, Utensils, Download, Save, FolderOpen, Trash2, X,
   ArrowRight, Info, CheckCircle2, AlertCircle, Clock, Plus, Minus,
-  CreditCard, FileText, ChevronDown, ChevronUp, Copy, FileDown, Code,
+  CreditCard, FileText, ChevronDown, ChevronUp, Copy, FileDown,
   Upload, FileJson
 } from 'lucide-react';
 import { TripParams, CostBreakdown, HotelStay } from './types';
@@ -14,7 +14,6 @@ import { generateTripProposal, analyzeCostsAI } from './services/geminiService';
 import ReactMarkdown from 'react-markdown';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import JSZip from 'jszip';
 
 // Helper per inizializzare/ridimensionare array
 const resizeArray = (currentArray: number[], newSize: number, defaultValue: number): number[] => {
@@ -624,26 +623,95 @@ export const App: React.FC = () => {
 
   const handleExportPDF = () => {
     const doc = new jsPDF();
-    
-    // Header
-    doc.setFillColor(124, 58, 237); // Brand purple
-    doc.rect(0, 0, 210, 20, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.text("Preventivo Viaggio - TourCalc Pro", 14, 13);
-    
-    // Info Viaggio
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(12);
-    doc.text(`Viaggio: ${params.tripName}`, 14, 35);
-    doc.setFontSize(10);
-    doc.text(`Partecipanti: ${params.participants} | Durata: ${params.durationDays} giorni`, 14, 42);
-    doc.text(`Data: ${new Date().toLocaleDateString()}`, 14, 48);
+    const primaryColor = [109, 40, 217]; // Brand 700
+    const secondaryColor = [245, 243, 255]; // Brand 50
 
-    // Tabella Hotel
+    // Header
+    doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    doc.rect(0, 0, 210, 24, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("TourCalc Pro", 14, 15);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Preventivo Dettagliato", 200, 15, { align: 'right' });
+    
+    // Info Viaggio Box
+    doc.setDrawColor(200, 200, 200);
+    doc.setFillColor(255, 255, 255);
+    doc.rect(14, 30, 182, 25, 'FD'); // Box border
+    
+    doc.setTextColor(50, 50, 50);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(params.tripName || "Viaggio Senza Nome", 18, 40);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Data: ${new Date().toLocaleDateString()}`, 18, 48);
+    doc.text(`Partecipanti: ${params.participants}`, 90, 48);
+    doc.text(`Durata: ${params.durationDays} giorni`, 150, 48);
+
+    let finalY = 60;
+
+    // --- TABELLA 1: DETTAGLIO STAFF ---
+    if (params.hasGuide || params.hasDriver) {
+        const staffBody = [];
+        
+        if (params.hasGuide) {
+            const guideFeeTotal = getSum(params.guide.dailyRatesBefore) + getSum(params.guide.dailyRates) + getSum(params.guide.dailyRatesAfter);
+            staffBody.push(['Guida Ciclistica', 
+                `Prima: ${params.guide.extraDaysBefore}gg\nDur: ${params.durationDays}gg\nDopo: ${params.guide.extraDaysAfter}gg`,
+                `€${guideFeeTotal.toFixed(2)}`,
+                `€${params.guide.travelCost.toFixed(2)}`
+            ]);
+        }
+        if (params.hasDriver) {
+             const driverFeeTotal = getSum(params.driver.dailyRatesBefore) + getSum(params.driver.dailyRates) + getSum(params.driver.dailyRatesAfter);
+             staffBody.push(['Autista', 
+                `Prima: ${params.driver.extraDaysBefore}gg\nDur: ${params.durationDays}gg\nDopo: ${params.driver.extraDaysAfter}gg`,
+                `€${driverFeeTotal.toFixed(2)}`,
+                `€${params.driver.travelCost.toFixed(2)}`
+            ]);
+        }
+
+        autoTable(doc, {
+            startY: finalY,
+            head: [['Ruolo', 'Giorni Impegno', 'Compensi Totali', 'Viaggio A/R']],
+            body: staffBody,
+            theme: 'grid',
+            headStyles: { fillColor: primaryColor, fontSize: 9 },
+            styles: { fontSize: 9, cellPadding: 2 },
+            columnStyles: { 0: { fontStyle: 'bold' } }
+        });
+        // @ts-ignore
+        finalY = doc.lastAutoTable.finalY + 10;
+    }
+
+    // --- TABELLA 2: LOGISTICA & VARI ---
+    const logisticsBody = [
+        ['Noleggio Van', `€${costs.fixedCosts.vanRental.toFixed(2)}`],
+        ['Carburante', `€${costs.fixedCosts.fuel.toFixed(2)}`],
+        ['Vitto & Alloggio Staff', `€${(costs.fixedCosts.staffAccommodation + costs.fixedCosts.staffLunch).toFixed(2)}`],
+    ];
+
     autoTable(doc, {
-      startY: 55,
-      head: [['Hotel', 'Notti', 'Costo/Notte', 'Totale (p.p.)']],
+        startY: finalY,
+        head: [['Voce Logistica', 'Costo Totale']],
+        body: logisticsBody,
+        theme: 'striped',
+        headStyles: { fillColor: [100, 116, 139] }, // slate-500
+        styles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
+    });
+     // @ts-ignore
+    finalY = doc.lastAutoTable.finalY + 10;
+
+    // --- TABELLA 3: HOTEL CLIENTI ---
+    autoTable(doc, {
+      startY: finalY,
+      head: [['Hotel / Tappa', 'Notti', 'Costo/Notte', 'Totale (per pax)']],
       body: params.hotelStays.map(h => [
         h.name,
         h.nights,
@@ -651,305 +719,41 @@ export const App: React.FC = () => {
         `€${(h.nights * h.costPerNight).toFixed(2)}`
       ]),
       theme: 'grid',
-      headStyles: { fillColor: [109, 40, 217] }, // brand-700
+      headStyles: { fillColor: primaryColor },
       styles: { fontSize: 9 }
     });
+     // @ts-ignore
+    finalY = doc.lastAutoTable.finalY + 10;
 
-    // Tabella Costi
-    // @ts-ignore
-    const finalY = doc.lastAutoTable.finalY || 60;
-    
+    // --- TABELLA 4: RIEPILOGO FINANZIARIO ---
     autoTable(doc, {
-      startY: finalY + 10,
-      head: [['Voce di Costo', 'Importo Totale']],
+      startY: finalY,
+      head: [['Voce', 'Importo', 'Note']],
       body: [
-        [{ content: 'COSTI FISSI', styles: { fontStyle: 'bold', fillColor: [245, 245, 245] } }, ''],
-        ['Staff (Compensi)', `€${costs.fixedCosts.staffFees.toFixed(2)}`],
-        ['Staff (Viaggi)', `€${costs.fixedCosts.staffTravel.toFixed(2)}`],
-        ['Staff (Vitto/Alloggio)', `€${(costs.fixedCosts.staffAccommodation + costs.fixedCosts.staffLunch).toFixed(2)}`],
-        ['Van & Carburante', `€${(costs.fixedCosts.vanRental + costs.fixedCosts.fuel).toFixed(2)}`],
-        [{ content: 'Totale Costi Fissi', styles: { fontStyle: 'bold' } }, `€${costs.fixedCosts.total.toFixed(2)}`],
+        [{ content: 'RIEPILOGO COSTI', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], halign: 'center' } }],
+        ['Totale Costi Fissi', `€${costs.fixedCosts.total.toFixed(2)}`, 'Staff, Mezzi, Logistica'],
+        ['Totale Costi Variabili', `€${costs.variableCosts.total.toFixed(2)}`, 'Hotel Clienti, Bici (x Tutti i pax)'],
+        ['Costo Totale Viaggio', `€${costs.totalCost.toFixed(2)}`, ''],
         
-        [{ content: 'COSTI VARIABILI', styles: { fontStyle: 'bold', fillColor: [245, 245, 245] } }, ''],
-        ['Alloggio Clienti', `€${costs.variableCosts.clientAccommodation.toFixed(2)}`],
-        ['Noleggio Bici', `€${costs.variableCosts.clientBike.toFixed(2)}`],
-        [{ content: 'Totale Costi Variabili', styles: { fontStyle: 'bold' } }, `€${costs.variableCosts.total.toFixed(2)}`],
+        [{ content: 'ANALISI PREZZO', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], halign: 'center' } }],
+        ['Costo per Persona (Vivo)', `€${costs.costPerPerson.toFixed(2)}`, ''],
+        ['Margine Applicato', `${params.profitMarginPercent}%`, ''],
+        [{ content: 'PREZZO SUGGERITO', styles: { fontStyle: 'bold', fontSize: 11 } }, { content: `€${costs.suggestedPricePerPerson.toFixed(2)}`, styles: { fontStyle: 'bold', fontSize: 11, textColor: [0, 100, 0] } }, 'Prezzo Finale per Pax'],
         
-        [{ content: 'TOTALE GENERALE', styles: { fontStyle: 'bold', fontSize: 10 } }, { content: `€${costs.totalCost.toFixed(2)}`, styles: { fontStyle: 'bold' } }],
+        [{ content: 'ANALISI REDDITIVITÀ', colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], halign: 'center' } }],
+        ['Profitto Totale Previsto', `€${costs.totalProfit.toFixed(2)}`, 'Se confermati tutti i pax'],
+        ['Break-Even Point', `${costs.isBreakEvenImpossible ? 'IMPOSSIBILE' : costs.breakEvenParticipants} partecipanti`, 'Minimo per coprire i costi']
       ],
       theme: 'grid',
-      headStyles: { fillColor: [109, 40, 217] },
-      styles: { fontSize: 9 }
-    });
-
-    // Summary Box
-    // @ts-ignore
-    const summaryY = doc.lastAutoTable.finalY + 15;
-    
-    doc.setFillColor(245, 243, 255); // brand-50
-    doc.setDrawColor(124, 58, 237);
-    doc.roundedRect(14, summaryY, 180, 40, 3, 3, 'FD');
-    
-    doc.setFontSize(11);
-    doc.setTextColor(109, 40, 217);
-    doc.text("PREZZO DI VENDITA SUGGERITO", 105, summaryY + 10, { align: 'center' });
-    
-    doc.setFontSize(22);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`€${costs.suggestedPricePerPerson.toFixed(0)}`, 105, summaryY + 22, { align: 'center' });
-    
-    doc.setFontSize(9);
-    doc.setTextColor(100, 100, 100);
-    doc.text("per persona", 105, summaryY + 30, { align: 'center' });
-
-    // Break Even
-    doc.setFontSize(9);
-    doc.text(`Minimo Partecipanti (Break-Even): ${costs.isBreakEvenImpossible ? 'IMPOSSIBILE' : costs.breakEvenParticipants}`, 14, summaryY + 50);
-
-    doc.save(`${params.tripName.replace(/\s+/g, '_')}_preventivo.pdf`);
-  };
-
-  const handleDownloadSource = async () => {
-    const zip = new JSZip();
-    
-    // Create the structure
-    zip.file("README.md", "# TourCalc Pro\n\nApplicazione React per calcolo preventivi viaggi.\n\n## Setup\n\n1. `npm install`\n2. `npm run dev`");
-    
-    // Since we are in a browser environment without file system access to other modules,
-    // we must manually reconstruct the critical files for the user to download a working copy.
-    // This assumes the file content provided in the context is current.
-
-    const indexHtmlContent = `<!DOCTYPE html>
-<html lang="it">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TourCalc Pro</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          fontFamily: {
-            sans: ['Outfit', 'sans-serif'],
-          },
-          extend: {
-            colors: {
-              brand: {
-                50: '#f5f3ff',
-                100: '#ede9fe',
-                200: '#ddd6fe',
-                300: '#c4b5fd',
-                400: '#a78bfa',
-                500: '#8b5cf6',
-                600: '#7c3aed',
-                700: '#6d28d9',
-                800: '#5b21b6',
-                900: '#4c1d95',
-              },
-              accent: {
-                500: '#f43f5e',
-                600: '#e11d48',
-              }
-            },
-            boxShadow: {
-              'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
-              'glow': '0 0 15px rgba(139, 92, 246, 0.3)',
-            }
-          }
-        }
+      headStyles: { fillColor: [50, 50, 50] },
+      styles: { fontSize: 10, cellPadding: 3 },
+      columnStyles: { 
+          1: { halign: 'right', fontStyle: 'bold' },
+          2: { fontStyle: 'italic', textColor: [100, 100, 100] }
       }
-    </script>
-  </head>
-  <body class="bg-slate-50 text-slate-900 font-sans antialiased selection:bg-brand-200 selection:text-brand-900">
-    <div id="root"></div>
-    <script type="module" src="/src/index.tsx"></script>
-  </body>
-</html>`;
-
-    // Package.json mock
-    const packageJsonContent = `{
-  "name": "tourcalc-pro",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "lucide-react": "^0.344.0",
-    "recharts": "^2.12.0",
-    "react-markdown": "^9.0.1",
-    "@google/genai": "^0.1.1",
-    "jspdf": "^2.5.1",
-    "jspdf-autotable": "^3.8.2",
-    "jszip": "^3.10.1"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.66",
-    "@types/react-dom": "^18.2.22",
-    "@vitejs/plugin-react": "^4.2.1",
-    "typescript": "^5.2.2",
-    "vite": "^5.2.0",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.3"
-  }
-}`;
-
-    const viteConfigContent = `import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-})`;
-
-    // Add root files
-    zip.file("index.html", indexHtmlContent);
-    zip.file("package.json", packageJsonContent);
-    zip.file("vite.config.ts", viteConfigContent);
-
-    // Create src folder
-    const src = zip.folder("src");
-    if (src) {
-        src.file("types.ts", `
-export interface StaffConfig {
-  dailyRates: number[]; 
-  dailyRatesBefore: number[]; 
-  dailyRatesAfter: number[]; 
-  travelCost: number; 
-  extraDaysBefore: number; 
-  extraDaysAfter: number; 
-}
-
-export interface HotelStay {
-  id: string;
-  name: string;
-  nights: number;
-  costPerNight: number;
-  paymentTerms: string;
-  cancellationPolicy: string;
-  dusSupplement: number;
-}
-
-export interface TripParams {
-  tripName: string;
-  participants: number;
-  durationDays: number;
-  profitMarginPercent: number;
-  hasGuide: boolean;
-  guide: StaffConfig;
-  hasDriver: boolean;
-  driver: StaffConfig;
-  staffDailyLunchCosts: number[];
-  staffDailyLunchCostsBefore: number[];
-  staffDailyLunchCostsAfter: number[];
-  staffDailyAccommodationCosts: number[]; 
-  staffDailyAccommodationCostsBefore: number[];
-  staffDailyAccommodationCostsAfter: number[];
-  vanDailyRentalCosts: number[];
-  vanDailyRentalCostsBefore: number[];
-  vanDailyRentalCostsAfter: number[];
-  fuelDailyCosts: number[];
-  fuelDailyCostsBefore: number[];
-  fuelDailyCostsAfter: number[];
-  hotelStays: HotelStay[];
-  bikeDailyRentalCosts: number[];
-}
-
-export interface CostBreakdown {
-  fixedCosts: {
-    staffFees: number;
-    staffTravel: number;
-    staffAccommodation: number;
-    staffLunch: number;
-    vanRental: number;
-    fuel: number;
-    total: number;
-  };
-  variableCosts: {
-    clientAccommodation: number;
-    clientBike: number;
-    total: number;
-  };
-  totalCost: number;
-  costPerPerson: number;
-  suggestedPricePerPerson: number;
-  totalRevenue: number;
-  totalProfit: number;
-  breakEvenParticipants: number; 
-  isBreakEvenImpossible: boolean;
-}`);
-
-        // Note: For App.tsx, we can't self-reflect perfectly. 
-        // In a real scenario, this would fetch the actual file content.
-        // Here we put a placeholder encouraging the user to copy from editor if needed, 
-        // OR we could try to put the current logic if we had it as a string constant.
-        // To avoid duplication bloat, we will add a note.
-        src.file("App.tsx", "// COPIA IL CODICE DAL TUO EDITOR AI STUDIO E INCOLLALO QUI.\n// (Il generatore automatico non può leggere il codice sorgente del componente App mentre è in esecuzione).");
-        
-        src.file("index.tsx", `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { App } from './App';
-
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
-}
-
-const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);`);
-
-        // Services
-        const services = src.folder("services");
-        services?.file("geminiService.ts", `import { GoogleGenAI } from "@google/genai";
-import { TripParams, CostBreakdown } from "../types";
-
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
-
-export const generateTripProposal = async (params: TripParams, costs: CostBreakdown): Promise<string> => {
-  const prompt = \`Agisci come Tour Operator...\`; // (Simplified for brevity in zip)
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
     });
-    return response.text || "Impossibile generare.";
-  } catch (error) { return "Errore."; }
-};
-export const analyzeCostsAI = async (costs: CostBreakdown): Promise<string> => { return "Analisi..."; };`);
-        
-        // Components
-        const components = src.folder("components");
-        components?.file("CostChart.tsx", `import React from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-// ... (Content of CostChart)
-export const CostChart = ({ costs }: any) => <div>Chart Placeholder</div>;`);
-        
-        components?.file("InputSection.tsx", `import React from 'react';
-// ... (Content of InputSection)
-export const NumberInput = (props: any) => <input {...props} />;
-export const Toggle = (props: any) => <button {...props} />;`);
-    }
 
-    const blob = await zip.generateAsync({type:"blob"});
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "TourCalcPro_Source.zip";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    doc.save(`${params.tripName.replace(/\s+/g, '_')}_preventivo_dettagliato.pdf`);
   };
 
   // Hotel Management Handlers
@@ -1091,13 +895,6 @@ export const Toggle = (props: any) => <button {...props} />;`);
             >
               <FolderOpen className="h-4 w-4 mr-2" />
               I Miei Viaggi
-            </button>
-            <button
-              onClick={handleDownloadSource}
-              className="flex items-center px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm font-medium transition-colors border border-white/10 backdrop-blur-sm whitespace-nowrap"
-            >
-              <Code className="h-4 w-4 mr-2" />
-              Scarica Codice
             </button>
              <button
               onClick={handleAnalyzeCosts}

@@ -13,6 +13,9 @@ export default defineConfig(({ mode }) => {
       // Mappa process.env.API_KEY (usato nel codice) alla variabile VITE_API_KEY (impostata su Vercel)
       // Questo previene il crash "process is not defined" nel browser
       'process.env.API_KEY': JSON.stringify(env.VITE_API_KEY)
+    },
+    build: {
+      chunkSizeWarningLimit: 1600, // Aumenta il limite a 1600kB per evitare il warning sui chunk vendor
     }
   }
 })
