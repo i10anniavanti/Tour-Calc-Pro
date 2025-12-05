@@ -861,7 +861,7 @@ export const App: React.FC = () => {
               <Calculator className="w-6 h-6 text-brand-200" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.10</h1>
+              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.11</h1>
               <div className="flex items-center space-x-2 text-xs text-brand-200">
                 <span className="opacity-80">PROFESSIONAL PLANNING TOOL</span>
                 {lastAutoSave && (
