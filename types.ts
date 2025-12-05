@@ -57,9 +57,11 @@ export interface TripParams {
 
   // Clienti
   hotelStays: HotelStay[];
+  
+  hasBikeRental: boolean; // NUOVO: Toggle per bici clienti
   bikeDailyRentalCosts: number[];
   
-  clientTransferCost: number; // NUOVO: Transfer A/R a persona
+  clientTotalTransferCost: number; // MODIFICATO: Transfer A/R costo TOTALE gruppo
   clientInsuranceCost: number; // NUOVO: Assicurazione a persona
   clientExperienceCost: number; // NUOVO: Visite/Esperienze a persona
   clientDailyDinnerCosts: number[]; // NUOVO: Cene clienti giornaliere
