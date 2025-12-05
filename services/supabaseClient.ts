@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { TripParams } from '../types';
 
@@ -24,8 +25,9 @@ export interface CloudTrip {
 export const saveTripToCloud = async (tripName: string, params: TripParams) => {
   if (!supabase) throw new Error("Supabase non configurato");
   
+  // NOTA: La tabella si chiama 'TourCalc' come configurato dall'utente
   const { data, error } = await supabase
-    .from('trips')
+    .from('TourCalc')
     .insert([
       { name: tripName, trip_data: params }
     ])
@@ -39,7 +41,7 @@ export const getTripsFromCloud = async (): Promise<CloudTrip[]> => {
   if (!supabase) return [];
   
   const { data, error } = await supabase
-    .from('trips')
+    .from('TourCalc')
     .select('*')
     .order('created_at', { ascending: false });
     
@@ -54,7 +56,7 @@ export const deleteTripFromCloud = async (id: string) => {
   if (!supabase) return;
   
   const { error } = await supabase
-    .from('trips')
+    .from('TourCalc')
     .delete()
     .eq('id', id);
     

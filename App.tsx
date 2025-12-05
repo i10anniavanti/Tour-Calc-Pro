@@ -551,9 +551,11 @@ export const App: React.FC = () => {
       }
       setUnsavedChanges(false);
       loadTrips(); // Reload list
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('Errore nel salvataggio: ' + e);
+      // Mostra messaggio di errore più specifico
+      const msg = e.message || e.error_description || JSON.stringify(e);
+      alert('Errore nel salvataggio: ' + msg);
     } finally {
       setIsSyncing(false);
     }
@@ -806,7 +808,7 @@ export const App: React.FC = () => {
               <Calculator className="w-6 h-6 text-brand-200" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro</h1>
+              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.2</h1>
               <div className="flex items-center space-x-2 text-xs text-brand-200">
                 <span className="opacity-80">PROFESSIONAL PLANNING TOOL</span>
                 {isCloudEnabled ? (
