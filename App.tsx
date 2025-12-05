@@ -671,7 +671,7 @@ export const App: React.FC = () => {
             const currentLocal = savedTrips.filter(t => !t.isCloud);
             const merged = [...(parsed as SavedTrip[]), ...currentLocal];
             const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-            setSavedTrips(unique);
+            setSavedTrips(unique as SavedTrip[]);
             localStorage.setItem('tourCalc_saves', JSON.stringify(unique));
             alert("Importazione completata!");
           } else {
@@ -861,7 +861,7 @@ export const App: React.FC = () => {
               <Calculator className="w-6 h-6 text-brand-200" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.5</h1>
+              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.7</h1>
               <div className="flex items-center space-x-2 text-xs text-brand-200">
                 <span className="opacity-80">PROFESSIONAL PLANNING TOOL</span>
                 {lastAutoSave && (
