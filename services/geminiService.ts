@@ -1,7 +1,15 @@
 import { GoogleGenAI } from "@google/genai";
 import { TripParams, CostBreakdown } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Inizializzazione Lazy: Crea l'istanza solo quando serve, non all'avvio dell'app.
+// Questo previene il crash (schermata bianca) se la API Key non è configurata correttamente su Vercel.
+const getAI = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API Key mancante o non configurata correttamente.");
+  }
+  return new GoogleGenAI({ apiKey });
+};
 
 export const generateTripProposal = async (params: TripParams, costs: CostBreakdown): Promise<string> => {
   const prompt = `
@@ -23,14 +31,15 @@ export const generateTripProposal = async (params: TripParams, costs: CostBreakd
   `;
 
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
     });
     return response.text || "Impossibile generare la proposta al momento.";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Errore Gemini:", error);
-    return "Si è verificato un errore durante la generazione della proposta con l'IA.";
+    return `Si è verificato un errore: ${error.message || "Errore sconosciuto"}. Verifica la API Key su Vercel.`;
   }
 };
 
@@ -49,13 +58,14 @@ export const analyzeCostsAI = async (costs: CostBreakdown): Promise<string> => {
   `;
 
   try {
+    const ai = getAI();
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
     });
     return response.text || "Analisi non disponibile.";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Errore Gemini:", error);
-    return "Errore nell'analisi dei costi.";
+    return `Errore nell'analisi dei costi: ${error.message || "Errore sconosciuto"}.`;
   }
 };
