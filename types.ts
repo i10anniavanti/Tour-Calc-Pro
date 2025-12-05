@@ -36,7 +36,7 @@ export interface TripParams {
   staffDailyLunchCosts: number[];
   staffDailyLunchCostsBefore: number[];
   staffDailyLunchCostsAfter: number[];
-  
+
   staffDailyAccommodationCosts: number[];
   staffDailyAccommodationCostsBefore: number[];
   staffDailyAccommodationCostsAfter: number[];
