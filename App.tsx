@@ -6,7 +6,7 @@ import {
   Fuel, Utensils, Download, Save, FolderOpen, Trash2, X,
   ArrowRight, Info, CheckCircle2, AlertCircle, Clock, Plus, Minus,
   CreditCard, FileText, ChevronDown, ChevronUp, Copy, FileDown,
-  Upload, FileJson, Cloud, CloudOff, RefreshCw
+  Upload, FileJson, Cloud, CloudOff, RefreshCw, Map, Plane, ShieldCheck, Ticket, Landmark
 } from 'lucide-react';
 import { TripParams, CostBreakdown, HotelStay } from './types';
 import { NumberInput, Toggle } from './components/InputSection';
@@ -39,15 +39,20 @@ const initialParams: TripParams = {
   participants: 8,
   durationDays: DEFAULT_DURATION,
   profitMarginPercent: 25,
+  
+  // Costi Staff
   hasGuide: true,
   guide: {
-    dailyRates: Array(DEFAULT_DURATION).fill(150),
+    // 120€ + 20% ritenuta = 144€
+    dailyRates: Array(DEFAULT_DURATION).fill(144),
     dailyRatesBefore: [],
     dailyRatesAfter: [],
     travelCost: 200,
     extraDaysBefore: 0,
     extraDaysAfter: 0,
   },
+  guideBikeDailyCosts: Array(DEFAULT_DURATION).fill(30),
+
   hasDriver: true,
   driver: {
     dailyRates: Array(DEFAULT_DURATION).fill(120),
@@ -57,7 +62,8 @@ const initialParams: TripParams = {
     extraDaysBefore: 1, 
     extraDaysAfter: 1, 
   },
-  // Staff Logistics
+  
+  // Logistica Staff condivisa
   staffDailyLunchCosts: Array(DEFAULT_DURATION).fill(25),
   staffDailyLunchCostsBefore: [25],
   staffDailyLunchCostsAfter: [25],
@@ -75,6 +81,11 @@ const initialParams: TripParams = {
   fuelDailyCostsBefore: [40],
   fuelDailyCostsAfter: [40],
 
+  staffTollsCost: 50, // Pedaggi
+
+  // Sviluppo
+  scoutingCost: 0,
+
   // Client
   hotelStays: [
     { 
@@ -88,6 +99,14 @@ const initialParams: TripParams = {
     }
   ],
   bikeDailyRentalCosts: Array(DEFAULT_DURATION).fill(30),
+  clientDailyDinnerCosts: Array(DEFAULT_DURATION).fill(35),
+  clientTransferCost: 50,
+  clientExperienceCost: 20,
+  clientInsuranceCost: 15,
+
+  // Commerciale
+  bankingFeePercent: 3,
+  agencyCommissionPercent: 0,
 };
 
 interface SavedTrip {
@@ -251,8 +270,7 @@ export const App: React.FC = () => {
         params: t.trip_data,
         isCloud: true
       }));
-      // Merge: Cloud vince su local per visualizzazione
-      setSavedTrips([...cloudTrips, ...localTrips.filter(l => !l.isCloud)]); // Semplificazione: mostra entrambi se diversi
+      setSavedTrips([...cloudTrips, ...localTrips.filter(l => !l.isCloud)]);
     } else {
       setSavedTrips(localTrips);
     }
@@ -261,13 +279,10 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     loadTrips();
-    
-    // Check for auto-save
     const autoSaved = localStorage.getItem('tourCalc_autosave');
     if (autoSaved) {
       try {
          const parsed = JSON.parse(autoSaved);
-         // Piccola logica: chiediamo solo se non è il default
          if (parsed.tripName !== initialParams.tripName) {
              if (window.confirm("Trovata una sessione precedente salvata automaticamente. Vuoi ripristinarla?")) {
                 setParams(parsed);
@@ -277,16 +292,15 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Auto-save logic (Local only for safety)
+  // Auto-save logic - 15 seconds
   useEffect(() => {
     const interval = setInterval(() => {
        localStorage.setItem('tourCalc_autosave', JSON.stringify(params));
        setLastAutoSave(new Date());
-    }, 30000); // 30 seconds
+    }, 15000); 
     return () => clearInterval(interval);
   }, [params]);
 
-  // Track unsaved changes
   useEffect(() => {
      setUnsavedChanges(true);
   }, [params]);
@@ -335,13 +349,15 @@ export const App: React.FC = () => {
         durationDays: safeDuration,
         hotelStays: newStays,
         bikeDailyRentalCosts: resizeArray(prev.bikeDailyRentalCosts, safeDuration, 30),
+        clientDailyDinnerCosts: resizeArray(prev.clientDailyDinnerCosts, safeDuration, 35),
         vanDailyRentalCosts: resizeArray(prev.vanDailyRentalCosts, safeDuration, 160),
         fuelDailyCosts: resizeArray(prev.fuelDailyCosts, safeDuration, 40),
         staffDailyLunchCosts: resizeArray(prev.staffDailyLunchCosts, safeDuration, 25),
         staffDailyAccommodationCosts: resizeArray(prev.staffDailyAccommodationCosts, safeDuration, 90),
+        guideBikeDailyCosts: resizeArray(prev.guideBikeDailyCosts, safeDuration, 30),
         guide: {
           ...prev.guide,
-          dailyRates: resizeArray(prev.guide.dailyRates, safeDuration, 150)
+          dailyRates: resizeArray(prev.guide.dailyRates, safeDuration, 144)
         },
         driver: {
           ...prev.driver,
@@ -365,10 +381,10 @@ export const App: React.FC = () => {
         newParams.guide = { ...prev.guide };
         if (type === 'before') {
           newParams.guide.extraDaysBefore = safeDays;
-          newParams.guide.dailyRatesBefore = resizeArray(prev.guide.dailyRatesBefore, safeDays, 150);
+          newParams.guide.dailyRatesBefore = resizeArray(prev.guide.dailyRatesBefore, safeDays, 144);
         } else {
           newParams.guide.extraDaysAfter = safeDays;
-          newParams.guide.dailyRatesAfter = resizeArray(prev.guide.dailyRatesAfter, safeDays, 150);
+          newParams.guide.dailyRatesAfter = resizeArray(prev.guide.dailyRatesAfter, safeDays, 144);
         }
       } else { 
         newParams.driver = { ...prev.driver };
@@ -404,9 +420,11 @@ export const App: React.FC = () => {
     let guideFees = 0;
     let guideAccommodation = 0;
     let guideLunch = 0;
+    let guideBikeTotal = 0;
     
     if (params.hasGuide) {
       guideFees = getSum(params.guide.dailyRatesBefore) + getSum(params.guide.dailyRates) + getSum(params.guide.dailyRatesAfter);
+      guideBikeTotal = getSum(params.guideBikeDailyCosts);
       
       const accBefore = params.staffDailyAccommodationCostsBefore.slice(0, params.guide.extraDaysBefore).reduce((a, b) => a + b, 0);
       const accDuring = getSum(params.staffDailyAccommodationCosts);
@@ -458,24 +476,52 @@ export const App: React.FC = () => {
       staffAccTotal + 
       staffLunchTotal +
       vanRentalTotal +
-      fuelTotal;
+      fuelTotal +
+      params.staffTollsCost +
+      guideBikeTotal +
+      params.scoutingCost;
 
     const totalBikeCostPerPerson = getSum(params.bikeDailyRentalCosts);
+    const totalDinnerCostPerPerson = getSum(params.clientDailyDinnerCosts);
+    
     const clientAccTotal = totalHotelCostPerPerson * params.participants;
     const clientBikeTotal = totalBikeCostPerPerson * params.participants;
-    
-    const variableTotal = clientAccTotal + clientBikeTotal;
+    const clientDinnerTotal = totalDinnerCostPerPerson * params.participants;
+    const clientTransferTotal = params.clientTransferCost * params.participants;
+    const clientExperienceTotal = params.clientExperienceCost * params.participants;
+    const clientInsuranceTotal = params.clientInsuranceCost * params.participants;
+
+    const variableTotal = clientAccTotal + clientBikeTotal + clientDinnerTotal + clientTransferTotal + clientExperienceTotal + clientInsuranceTotal;
 
     const totalCost = fixedTotal + variableTotal;
     const costPerPerson = totalCost / (params.participants || 1);
     
-    const multiplier = 1 + (params.profitMarginPercent / 100);
-    const suggestedPricePerPerson = costPerPerson * multiplier;
-    const totalRevenue = suggestedPricePerPerson * params.participants;
-    const totalProfit = totalRevenue - totalCost;
+    // Calcolo Prezzo con Commissioni
+    // Prezzo = (Costi + Profitto) / (1 - %Commissioni)
+    // 1. Calcolo il prezzo "netto" desiderato che include i costi e il margine di profitto sui costi
+    const marginMultiplier = 1 + (params.profitMarginPercent / 100);
+    const targetNetPricePerPerson = costPerPerson * marginMultiplier;
 
-    const variableCostPerPax = totalHotelCostPerPerson + totalBikeCostPerPerson;
-    const contributionMargin = suggestedPricePerPerson - variableCostPerPax;
+    // 2. Aggiungo le commissioni (Banca + Agenzia) che si calcolano sul PREZZO FINALE
+    const totalCommissionPercent = (params.bankingFeePercent + params.agencyCommissionPercent) / 100;
+    // Evito divisione per zero o negativo se commissioni >= 100%
+    const safeDivisor = Math.max(0.01, 1 - totalCommissionPercent);
+    const suggestedPricePerPerson = targetNetPricePerPerson / safeDivisor;
+
+    const totalRevenue = suggestedPricePerPerson * params.participants;
+    
+    // Calcolo costi commerciali
+    const bankingFees = totalRevenue * (params.bankingFeePercent / 100);
+    const agencyCommissions = totalRevenue * (params.agencyCommissionPercent / 100);
+    const commercialCostsTotal = bankingFees + agencyCommissions;
+
+    const totalProfit = totalRevenue - totalCost - commercialCostsTotal;
+
+    const variableCostPerPax = totalHotelCostPerPerson + totalBikeCostPerPerson + totalDinnerCostPerPerson + params.clientTransferCost + params.clientExperienceCost + params.clientInsuranceCost;
+    
+    // Margine di contribuzione unitario = Prezzo vendita - Costi Variabili Unitari - Commissioni Unitarie
+    const commissionPerPax = suggestedPricePerPerson * totalCommissionPercent;
+    const contributionMargin = suggestedPricePerPerson - variableCostPerPax - commissionPerPax;
     
     let breakEvenParticipants = 0;
     let isBreakEvenImpossible = false;
@@ -493,16 +539,28 @@ export const App: React.FC = () => {
         staffTravel: staffTravelTotal,
         staffAccommodation: staffAccTotal,
         staffLunch: staffLunchTotal,
+        guideBike: guideBikeTotal,
         vanRental: vanRentalTotal,
         fuel: fuelTotal,
+        tolls: params.staffTollsCost,
+        scouting: params.scoutingCost,
         total: fixedTotal
       },
       variableCosts: {
         clientAccommodation: clientAccTotal,
         clientBike: clientBikeTotal,
+        clientDinner: clientDinnerTotal,
+        clientTransfer: clientTransferTotal,
+        clientExperience: clientExperienceTotal,
+        clientInsurance: clientInsuranceTotal,
         total: variableTotal
       },
-      totalCost,
+      commercialCosts: {
+        bankingFees,
+        agencyCommissions,
+        total: commercialCostsTotal
+      },
+      totalCost: totalCost + commercialCostsTotal, // Totale uscite reali
       costPerPerson,
       suggestedPricePerPerson,
       totalRevenue,
@@ -530,14 +588,10 @@ export const App: React.FC = () => {
 
   const handleSaveTrip = async () => {
     setIsSyncing(true);
-    
     try {
       if (isCloudEnabled) {
-        // Save to Cloud
         await saveTripToCloud(params.tripName || "Viaggio Senza Nome", params);
-        alert('Viaggio salvato nel CLOUD con successo!');
       } else {
-        // Save to Local
         const newTrip: SavedTrip = {
           id: Date.now().toString(),
           name: params.tripName || "Viaggio Senza Nome",
@@ -547,15 +601,13 @@ export const App: React.FC = () => {
         const updated = [newTrip, ...savedTrips.filter(t => !t.isCloud)];
         setSavedTrips(updated);
         localStorage.setItem('tourCalc_saves', JSON.stringify(updated));
-        alert('Viaggio salvato in LOCALE (Browser)!');
       }
       setUnsavedChanges(false);
-      loadTrips(); // Reload list
+      loadTrips();
     } catch (e: any) {
       console.error(e);
-      // Mostra messaggio di errore più specifico
-      const msg = e.message || e.error_description || JSON.stringify(e);
-      alert('Errore nel salvataggio: ' + msg);
+      const msg = e.message || e.error_description || (e.details ? JSON.stringify(e.details) : JSON.stringify(e));
+      alert(`Errore nel salvataggio: ${msg}`);
     } finally {
       setIsSyncing(false);
     }
@@ -568,18 +620,22 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteTrip = async (id: string, isCloud?: boolean) => {
-    if(!window.confirm("Sei sicuro di voler eliminare questo viaggio?")) return;
-    
     setIsSyncing(true);
-    if (isCloud && isCloudEnabled) {
-      await deleteTripFromCloud(id);
-    } else {
-      const updated = savedTrips.filter(t => t.id !== id);
-      setSavedTrips(updated);
-      localStorage.setItem('tourCalc_saves', JSON.stringify(updated));
+    try {
+      if (isCloud && isCloudEnabled) {
+        await deleteTripFromCloud(id);
+      } else {
+        const updated = savedTrips.filter(t => t.id !== id);
+        setSavedTrips(updated);
+        localStorage.setItem('tourCalc_saves', JSON.stringify(updated));
+      }
+      loadTrips();
+    } catch (e: any) {
+      console.error(e);
+      alert("Errore cancellazione: " + (e.message || "Errore sconosciuto"));
+    } finally {
+      setIsSyncing(false);
     }
-    loadTrips();
-    setIsSyncing(false);
   };
 
   const handleExportBackup = () => {
@@ -596,7 +652,6 @@ export const App: React.FC = () => {
   const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
     const fileReader = new FileReader();
     const files = event.target.files;
-    
     if (files && files.length > 0) {
       fileReader.readAsText(files[0], "UTF-8");
       fileReader.onload = (e) => {
@@ -604,11 +659,9 @@ export const App: React.FC = () => {
           const content = e.target?.result as string;
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
-            // Filter out existing local IDs to avoid duplicates if needed, or just append
             const currentLocal = savedTrips.filter(t => !t.isCloud);
             const merged = [...parsed, ...currentLocal];
             const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-            
             setSavedTrips(unique);
             localStorage.setItem('tourCalc_saves', JSON.stringify(unique));
             alert("Importazione completata!");
@@ -630,9 +683,6 @@ export const App: React.FC = () => {
       ["Partecipanti", params.participants],
       ["Durata", params.durationDays],
       [""],
-      ["DETTAGLIO HOTEL", "NOTTI", "COSTO/NOTTE", "TOTALE"],
-      ...params.hotelStays.map(h => [h.name, h.nights, h.costPerNight.toFixed(2), (h.nights * h.costPerNight).toFixed(2)]),
-      [""],
       ["COSTI FISSI", "IMPORTO"],
       ["Compensi Staff", costs.fixedCosts.staffFees.toFixed(2)],
       ["Viaggi Staff", costs.fixedCosts.staffTravel.toFixed(2)],
@@ -640,25 +690,34 @@ export const App: React.FC = () => {
       ["Pasti Staff", costs.fixedCosts.staffLunch.toFixed(2)],
       ["Noleggio Van", costs.fixedCosts.vanRental.toFixed(2)],
       ["Carburante", costs.fixedCosts.fuel.toFixed(2)],
+      ["Pedaggi", costs.fixedCosts.tolls.toFixed(2)],
+      ["Bici Guida", costs.fixedCosts.guideBike.toFixed(2)],
+      ["Sviluppo & Ricognizione", costs.fixedCosts.scouting.toFixed(2)],
       ["TOTALE COSTI FISSI", costs.fixedCosts.total.toFixed(2)],
       [""],
       ["COSTI VARIABILI", "IMPORTO"],
       ["Alloggio Clienti", costs.variableCosts.clientAccommodation.toFixed(2)],
-      ["Noleggio Bici", costs.variableCosts.clientBike.toFixed(2)],
+      ["Noleggio Bici Clienti", costs.variableCosts.clientBike.toFixed(2)],
+      ["Transfer A/R", costs.variableCosts.clientTransfer.toFixed(2)],
+      ["Assicurazione", costs.variableCosts.clientInsurance.toFixed(2)],
+      ["Esperienze/Visite", costs.variableCosts.clientExperience.toFixed(2)],
+      ["Cene", costs.variableCosts.clientDinner.toFixed(2)],
       ["TOTALE COSTI VARIABILI", costs.variableCosts.total.toFixed(2)],
       [""],
+      ["COSTI COMMERCIALI", "IMPORTO"],
+      ["Commissioni Banca (3%)", costs.commercialCosts.bankingFees.toFixed(2)],
+      ["Commissioni Agenzia", costs.commercialCosts.agencyCommissions.toFixed(2)],
+      [""],
       ["RISULTATI ECONOMICI", ""],
-      ["Costo Totale", costs.totalCost.toFixed(2)],
-      ["Costo per Persona", costs.costPerPerson.toFixed(2)],
+      ["Costo Totale (Uscite)", costs.totalCost.toFixed(2)],
+      ["Costo per Persona (Base)", costs.costPerPerson.toFixed(2)],
       ["Margine (%)", params.profitMarginPercent],
       ["PREZZO VENDITA SUGGERITO", costs.suggestedPricePerPerson.toFixed(2)],
-      ["Profitto Totale", costs.totalProfit.toFixed(2)],
+      ["Profitto Netto Totale", costs.totalProfit.toFixed(2)],
       ["Break Even Point (Pax)", costs.isBreakEvenImpossible ? "IMPOSSIBILE" : costs.breakEvenParticipants]
     ];
 
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
-      + rows.map(e => e.join(",")).join("\n");
-    
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + rows.map(e => e.join(",")).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -671,8 +730,7 @@ export const App: React.FC = () => {
   const handleExportPDF = () => {
     const doc = new jsPDF();
     const primaryColor: [number, number, number] = [109, 40, 217];
-    const secondaryColor: [number, number, number] = [245, 243, 255];
-
+    
     doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     doc.rect(0, 0, 210, 24, 'F');
     doc.setTextColor(255, 255, 255);
@@ -683,66 +741,50 @@ export const App: React.FC = () => {
     doc.setFont("helvetica", "normal");
     doc.text("Preventivo Dettagliato", 200, 15, { align: 'right' });
     
-    doc.setDrawColor(200, 200, 200);
-    doc.setFillColor(255, 255, 255);
-    doc.rect(14, 30, 182, 25, 'FD'); 
-    
     doc.setTextColor(50, 50, 50);
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
-    doc.text(params.tripName || "Viaggio Senza Nome", 18, 40);
+    doc.text(params.tripName || "Viaggio Senza Nome", 14, 35);
     
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text(`Data: ${new Date().toLocaleDateString()}`, 18, 48);
-    doc.text(`Partecipanti: ${params.participants}`, 90, 48);
-    doc.text(`Durata: ${params.durationDays} giorni`, 150, 48);
+    doc.text(`Data: ${new Date().toLocaleDateString()}`, 14, 42);
+    doc.text(`Partecipanti: ${params.participants}`, 80, 42);
+    doc.text(`Durata: ${params.durationDays} giorni`, 140, 42);
 
-    let finalY = 60;
+    let finalY = 55;
 
-    if (params.hasGuide || params.hasDriver) {
-        const staffBody = [];
-        
-        if (params.hasGuide) {
-            const guideFeeTotal = getSum(params.guide.dailyRatesBefore) + getSum(params.guide.dailyRates) + getSum(params.guide.dailyRatesAfter);
-            staffBody.push(["Guida Ciclistica", 
-                `Tour (${params.durationDays}gg) + Extra (${params.guide.extraDaysBefore + params.guide.extraDaysAfter}gg)`, 
-                `€${guideFeeTotal.toFixed(2)}`
-            ]);
-            staffBody.push(["Viaggio Guida", "Volo/Trasferimento", `€${params.guide.travelCost.toFixed(2)}`]);
-        }
-        if (params.hasDriver) {
-            const driverFeeTotal = getSum(params.driver.dailyRatesBefore) + getSum(params.driver.dailyRates) + getSum(params.driver.dailyRatesAfter);
-            staffBody.push(["Autista", 
-                `Tour (${params.durationDays}gg) + Extra (${params.driver.extraDaysBefore + params.driver.extraDaysAfter}gg)`, 
-                `€${driverFeeTotal.toFixed(2)}`
-            ]);
-            staffBody.push(["Viaggio Autista", "Volo/Trasferimento", `€${params.driver.travelCost.toFixed(2)}`]);
-        }
-
+    // STAFF
+    const staffBody = [];
+    if (params.hasGuide) {
+        staffBody.push(["Guida Ciclistica", `Fees + Viaggi + Bici`, `€${(costs.fixedCosts.staffFees/2 + costs.fixedCosts.staffTravel/2 + costs.fixedCosts.guideBike).toFixed(2)}`]);
+    }
+    if (params.hasDriver) {
+        staffBody.push(["Autista", `Fees + Viaggi`, `€${(costs.fixedCosts.staffFees/2 + costs.fixedCosts.staffTravel/2).toFixed(2)}`]);
+    }
+    if (staffBody.length > 0) {
         autoTable(doc, {
             startY: finalY,
-            head: [['Ruolo', 'Dettaglio Giorni/Servizio', 'Costo Totale']],
+            head: [['Staff', 'Dettaglio', 'Costo']],
             body: staffBody,
             theme: 'grid',
             headStyles: { fillColor: primaryColor, textColor: 255 },
             styles: { fontSize: 9 }
         });
-        
         // @ts-ignore
         finalY = doc.lastAutoTable.finalY + 10;
     }
 
+    // LOGISTICA
     const logBody = [
-        ["Noleggio Van", `Totale per ${(params.hasDriver ? params.durationDays + params.driver.extraDaysBefore + params.driver.extraDaysAfter : 0)} giorni`, `€${costs.fixedCosts.vanRental.toFixed(2)}`],
-        ["Carburante", "Stima Totale", `€${costs.fixedCosts.fuel.toFixed(2)}`],
-        ["Alloggio Staff", "Guida + Autista (Mezza Pensione)", `€${costs.fixedCosts.staffAccommodation.toFixed(2)}`],
-        ["Pasti Staff", "Pranzi on tour", `€${costs.fixedCosts.staffLunch.toFixed(2)}`]
+        ["Noleggio Van", `Totale`, `€${costs.fixedCosts.vanRental.toFixed(2)}`],
+        ["Carburante & Pedaggi", `Stima Totale`, `€${(costs.fixedCosts.fuel + costs.fixedCosts.tolls).toFixed(2)}`],
+        ["Vitto e Alloggio Staff", `Hotel + Pasti`, `€${(costs.fixedCosts.staffAccommodation + costs.fixedCosts.staffLunch).toFixed(2)}`],
+        ["Sviluppo", `Ricognizione`, `€${costs.fixedCosts.scouting.toFixed(2)}`]
     ];
-
     autoTable(doc, {
         startY: finalY,
-        head: [['Voce Logistica', 'Note', 'Costo']],
+        head: [['Logistica', 'Dettaglio', 'Costo']],
         body: logBody,
         theme: 'grid',
         headStyles: { fillColor: [139, 92, 246], textColor: 255 }, 
@@ -751,49 +793,51 @@ export const App: React.FC = () => {
     // @ts-ignore
     finalY = doc.lastAutoTable.finalY + 10;
 
-    const hotelBody = params.hotelStays.map(h => [
-        h.name,
-        `${h.nights} notti`,
-        `€${h.costPerNight.toFixed(2)}`,
-        `€${(h.nights * h.costPerNight * params.participants).toFixed(2)}`
-    ]);
-
-    doc.text("Dettaglio Hotel Clienti", 14, finalY - 2);
+    // CLIENTI
+    const clientBody = [
+        ["Hotel", "Totale Gruppo", `€${costs.variableCosts.clientAccommodation.toFixed(2)}`],
+        ["Noleggio Bici", "Totale Gruppo", `€${costs.variableCosts.clientBike.toFixed(2)}`],
+        ["Transfer A/R", "Totale Gruppo", `€${costs.variableCosts.clientTransfer.toFixed(2)}`],
+        ["Cene", "Totale Gruppo", `€${costs.variableCosts.clientDinner.toFixed(2)}`],
+        ["Assicurazione & Extra", "Totale Gruppo", `€${(costs.variableCosts.clientInsurance + costs.variableCosts.clientExperience).toFixed(2)}`],
+    ];
     autoTable(doc, {
         startY: finalY,
-        head: [['Hotel', 'Durata', 'Costo/Notte (Pax)', 'Totale Gruppo']],
-        body: hotelBody,
+        head: [['Servizi Clienti', 'Note', 'Costo']],
+        body: clientBody,
         theme: 'grid',
         headStyles: { fillColor: [244, 63, 94], textColor: 255 },
         styles: { fontSize: 9 }
     });
     // @ts-ignore
+    finalY = doc.lastAutoTable.finalY + 10;
+
+    // COMMERCIALI
+    const commBody = [
+        ["Commissioni Bancarie", `${params.bankingFeePercent}%`, `€${costs.commercialCosts.bankingFees.toFixed(2)}`],
+        ["Commissioni Agenzia", `${params.agencyCommissionPercent}%`, `€${costs.commercialCosts.agencyCommissions.toFixed(2)}`],
+    ];
+    autoTable(doc, {
+        startY: finalY,
+        head: [['Commerciale', '%', 'Importo']],
+        body: commBody,
+        theme: 'grid',
+        headStyles: { fillColor: [71, 85, 105], textColor: 255 },
+        styles: { fontSize: 9 }
+    });
+    // @ts-ignore
     finalY = doc.lastAutoTable.finalY + 15;
 
-    if (finalY > 240) {
-        doc.addPage();
-        finalY = 20;
-    }
-
+    // TOTALE
     doc.setFillColor(245, 243, 255); 
     doc.setDrawColor(109, 40, 217); 
-    doc.rect(120, finalY, 80, 50, 'FD');
-
-    doc.setFontSize(12);
+    doc.rect(14, finalY, 182, 30, 'FD');
+    doc.setFontSize(14);
     doc.setTextColor(109, 40, 217);
-    doc.setFont("helvetica", "bold");
-    doc.text("PREZZO CONSIGLIATO", 125, finalY + 10);
-    
-    doc.setFontSize(22);
-    doc.setTextColor(0, 0, 0);
-    doc.text(`€${costs.suggestedPricePerPerson.toFixed(0)}`, 125, finalY + 22);
+    doc.text(`PREZZO CONSIGLIATO: €${costs.suggestedPricePerPerson.toFixed(2)} pp`, 20, finalY + 12);
     doc.setFontSize(10);
-    doc.text("per persona", 125, finalY + 28);
-
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`Costo Vivo: €${costs.costPerPerson.toFixed(0)}`, 125, finalY + 38);
-    doc.text(`Margine: €${(costs.suggestedPricePerPerson - costs.costPerPerson).toFixed(0)} (${params.profitMarginPercent}%)`, 125, finalY + 44);
+    doc.setTextColor(50, 50, 50);
+    doc.text(`Profitto Netto Totale: €${costs.totalProfit.toFixed(2)}`, 20, finalY + 22);
 
     doc.save(`${params.tripName.replace(/\s+/g, '_')}_preventivo.pdf`);
   };
@@ -808,16 +852,21 @@ export const App: React.FC = () => {
               <Calculator className="w-6 h-6 text-brand-200" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.2</h1>
+              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.3</h1>
               <div className="flex items-center space-x-2 text-xs text-brand-200">
                 <span className="opacity-80">PROFESSIONAL PLANNING TOOL</span>
+                {lastAutoSave && (
+                   <span className="hidden sm:inline-block text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-brand-100">
+                      Auto-save: {lastAutoSave.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second: '2-digit'})}
+                   </span>
+                )}
                 {isCloudEnabled ? (
                   <span className="flex items-center bg-green-500/20 px-1.5 py-0.5 rounded text-[10px] text-green-200 border border-green-500/30">
-                    <Cloud className="w-3 h-3 mr-1" /> CLOUD ACTIVE
+                    <span title="Cloud Active"><Cloud className="w-3 h-3 mr-1" /></span> CLOUD
                   </span>
                 ) : (
                   <span className="flex items-center bg-slate-500/30 px-1.5 py-0.5 rounded text-[10px] text-slate-300">
-                    <CloudOff className="w-3 h-3 mr-1" /> LOCAL MODE
+                    <span title="Local Mode"><CloudOff className="w-3 h-3 mr-1" /></span> LOCAL
                   </span>
                 )}
               </div>
@@ -826,7 +875,7 @@ export const App: React.FC = () => {
           <div className="flex items-center space-x-3">
              {unsavedChanges && (
                 <span className="text-xs text-amber-300 animate-pulse font-medium hidden sm:inline-block">
-                   ⚠ Modifiche non salvate
+                   ⚠ Unsaved
                 </span>
              )}
             <button 
@@ -842,6 +891,13 @@ export const App: React.FC = () => {
             >
               <Sparkles className="w-4 h-4 mr-2" />
               {isAiLoading ? 'Analisi...' : 'Analisi IA'}
+            </button>
+            <button 
+                 onClick={handleExportPDF}
+                 className="flex items-center justify-center p-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg font-bold transition-all shadow-lg shadow-rose-500/30"
+                 title="Esporta PDF"
+               >
+                 <FileText className="w-5 h-5" />
             </button>
           </div>
         </div>
@@ -897,13 +953,41 @@ export const App: React.FC = () => {
                   <NumberInput label="Durata (Giorni)" value={params.durationDays} onChange={handleDurationChange} icon={Calendar} min={1} />
                 </div>
                 <NumberInput 
-                   label="Margine Profitto (%)" 
+                   label="Margine Profitto (% su Costi)" 
                    value={params.profitMarginPercent} 
                    onChange={v => setParams({...params, profitMarginPercent: v})} 
                    icon={TrendingUp}
                    suffix="%"
                 />
               </div>
+            </SectionCard>
+
+            {/* Commercial & Development */}
+            <SectionCard title="Commerciale & Sviluppo" icon={Landmark}>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <NumberInput 
+                     label="Sviluppo & Scouting (Fisso)" 
+                     value={params.scoutingCost} 
+                     onChange={v => setParams({...params, scoutingCost: v})} 
+                     icon={Map}
+                  />
+                  <NumberInput 
+                     label="Comm. Bancarie (%)" 
+                     value={params.bankingFeePercent} 
+                     onChange={v => setParams({...params, bankingFeePercent: v})} 
+                     icon={CreditCard}
+                     suffix="%"
+                     placeholder="3"
+                  />
+                   <NumberInput 
+                     label="Comm. Agenzia (%)" 
+                     value={params.agencyCommissionPercent} 
+                     onChange={v => setParams({...params, agencyCommissionPercent: v})} 
+                     icon={Briefcase}
+                     suffix="%"
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-2">Le commissioni percentuali vengono calcolate sul prezzo di vendita finale, riducendo il margine netto.</p>
             </SectionCard>
 
             {/* Staff & Logistics */}
@@ -925,30 +1009,25 @@ export const App: React.FC = () => {
                           <NumberInput label="Giorni Dopo" value={params.guide.extraDaysAfter} onChange={v => handleExtraDaysChange('guide', 'after', v)} icon={Clock} />
                        </div>
 
-                       {params.guide.extraDaysBefore > 0 && (
-                          <DailyCostGrid 
-                            label="Compenso Guida (Giorni Prima)" 
-                            values={params.guide.dailyRatesBefore} 
-                            onChange={vals => setParams({...params, guide: {...params.guide, dailyRatesBefore: vals}})} 
-                            variant="before"
-                          />
-                       )}
-
                        <DailyCostGrid 
                          label="Compenso Guida (Durante il Tour)" 
                          values={params.guide.dailyRates} 
                          onChange={vals => setParams({...params, guide: {...params.guide, dailyRates: vals}})} 
                          icon={User}
+                         helperText="Considera eventuale ritenuta (es. 120 + 20% = 144)"
                        />
+                       
+                       <div className="h-px bg-indigo-200/50 my-4"></div>
 
-                       {params.guide.extraDaysAfter > 0 && (
-                          <DailyCostGrid 
-                            label="Compenso Guida (Giorni Dopo)" 
-                            values={params.guide.dailyRatesAfter} 
-                            onChange={vals => setParams({...params, guide: {...params.guide, dailyRatesAfter: vals}})} 
-                            variant="after"
-                          />
-                       )}
+                        {/* Guide Bikes */}
+                        <DailyCostGrid 
+                          label="Noleggio Bici Guida (Giornaliero)" 
+                          values={params.guideBikeDailyCosts} 
+                          onChange={vals => setParams({...params, guideBikeDailyCosts: vals})} 
+                          icon={Bike}
+                        />
+
+                       {/* Extra Days Fees handled implicitly by array resizing logic but visually hidden if empty/zero for cleaner UI if needed, kept visible for consistency */}
                     </div>
                   )}
                 </div>
@@ -969,33 +1048,27 @@ export const App: React.FC = () => {
                         </div>
 
                         {/* Driver Fees */}
-                        {params.driver.extraDaysBefore > 0 && (
-                           <DailyCostGrid label="Compenso Autista (Prima)" values={params.driver.dailyRatesBefore} onChange={vals => setParams({...params, driver: {...params.driver, dailyRatesBefore: vals}})} variant="before" />
-                        )}
                         <DailyCostGrid label="Compenso Autista (Tour)" values={params.driver.dailyRates} onChange={vals => setParams({...params, driver: {...params.driver, dailyRates: vals}})} />
-                        {params.driver.extraDaysAfter > 0 && (
-                           <DailyCostGrid label="Compenso Autista (Dopo)" values={params.driver.dailyRatesAfter} onChange={vals => setParams({...params, driver: {...params.driver, dailyRatesAfter: vals}})} variant="after" />
-                        )}
-
+                        
                         <div className="h-px bg-indigo-200/50 my-6"></div>
 
                         {/* Van Costs */}
-                        {params.driver.extraDaysBefore > 0 && (
-                           <DailyCostGrid label="Noleggio Van (Prima)" values={params.vanDailyRentalCostsBefore} onChange={vals => setParams({...params, vanDailyRentalCostsBefore: vals})} variant="before" icon={Bus} />
-                        )}
                         <DailyCostGrid label="Noleggio Van (Tour)" values={params.vanDailyRentalCosts} onChange={vals => setParams({...params, vanDailyRentalCosts: vals})} icon={Bus} />
-                        {params.driver.extraDaysAfter > 0 && (
-                           <DailyCostGrid label="Noleggio Van (Dopo)" values={params.vanDailyRentalCostsAfter} onChange={vals => setParams({...params, vanDailyRentalCostsAfter: vals})} variant="after" icon={Bus} />
-                        )}
-
+                        
                         {/* Fuel Costs */}
-                        {params.driver.extraDaysBefore > 0 && (
-                           <DailyCostGrid label="Carburante (Prima)" values={params.fuelDailyCostsBefore} onChange={vals => setParams({...params, fuelDailyCostsBefore: vals})} variant="before" icon={Fuel} />
-                        )}
                         <DailyCostGrid label="Carburante (Tour)" values={params.fuelDailyCosts} onChange={vals => setParams({...params, fuelDailyCosts: vals})} icon={Fuel} />
-                        {params.driver.extraDaysAfter > 0 && (
-                           <DailyCostGrid label="Carburante (Dopo)" values={params.fuelDailyCostsAfter} onChange={vals => setParams({...params, fuelDailyCostsAfter: vals})} variant="after" icon={Fuel} />
-                        )}
+                        
+                        <div className="mt-4">
+                           <NumberInput 
+                              label="Pedaggi Autostradali (Totale Stigamato)" 
+                              value={params.staffTollsCost} 
+                              onChange={v => setParams({...params, staffTollsCost: v})} 
+                              icon={Truck}
+                           />
+                           <a href="https://www.viamichelin.it/" target="_blank" rel="noreferrer" className="text-xs text-brand-600 hover:underline flex items-center mt-1 ml-1">
+                              Calcola su ViaMichelin <ArrowRight className="w-3 h-3 ml-1"/>
+                           </a>
+                        </div>
                      </div>
                    )}
                 </div>
@@ -1006,29 +1079,8 @@ export const App: React.FC = () => {
                       <h3 className="font-bold text-slate-800 mb-4 flex items-center"><Hotel className="w-4 h-4 mr-2"/> Vitto e Alloggio Staff</h3>
                       
                       <div className="space-y-6">
-                         {/* Accommodation */}
-                         <div>
-                            <p className="text-xs font-bold text-slate-500 mb-2 uppercase">Costo Alloggio Staff (Totale per persona)</p>
-                            {(params.guide.extraDaysBefore > 0 || params.driver.extraDaysBefore > 0) && (
-                               <DailyCostGrid label="Hotel Staff (Prima)" values={params.staffDailyAccommodationCostsBefore} onChange={vals => setParams({...params, staffDailyAccommodationCostsBefore: vals})} variant="before" />
-                            )}
-                            <DailyCostGrid label="Hotel Staff (Tour)" values={params.staffDailyAccommodationCosts} onChange={vals => setParams({...params, staffDailyAccommodationCosts: vals})} />
-                            {(params.guide.extraDaysAfter > 0 || params.driver.extraDaysAfter > 0) && (
-                               <DailyCostGrid label="Hotel Staff (Dopo)" values={params.staffDailyAccommodationCostsAfter} onChange={vals => setParams({...params, staffDailyAccommodationCostsAfter: vals})} variant="after" />
-                            )}
-                         </div>
-
-                         {/* Meals */}
-                         <div>
-                            <p className="text-xs font-bold text-slate-500 mb-2 uppercase">Costo Pasti Staff (Totale per persona)</p>
-                            {(params.guide.extraDaysBefore > 0 || params.driver.extraDaysBefore > 0) && (
-                               <DailyCostGrid label="Pasti Staff (Prima)" values={params.staffDailyLunchCostsBefore} onChange={vals => setParams({...params, staffDailyLunchCostsBefore: vals})} variant="before" icon={Utensils} />
-                            )}
-                            <DailyCostGrid label="Pasti Staff (Tour)" values={params.staffDailyLunchCosts} onChange={vals => setParams({...params, staffDailyLunchCosts: vals})} icon={Utensils} />
-                            {(params.guide.extraDaysAfter > 0 || params.driver.extraDaysAfter > 0) && (
-                               <DailyCostGrid label="Pasti Staff (Dopo)" values={params.staffDailyLunchCostsAfter} onChange={vals => setParams({...params, staffDailyLunchCostsAfter: vals})} variant="after" icon={Utensils} />
-                            )}
-                         </div>
+                         <DailyCostGrid label="Hotel Staff (Tour)" values={params.staffDailyAccommodationCosts} onChange={vals => setParams({...params, staffDailyAccommodationCosts: vals})} />
+                         <DailyCostGrid label="Pasti Staff (Tour)" values={params.staffDailyLunchCosts} onChange={vals => setParams({...params, staffDailyLunchCosts: vals})} icon={Utensils} />
                       </div>
                    </div>
                 )}
@@ -1037,7 +1089,7 @@ export const App: React.FC = () => {
             </SectionCard>
 
             {/* Client Costs */}
-            <SectionCard title="Costi Clienti (Hotel & Bici)" icon={Hotel}>
+            <SectionCard title="Costi Clienti (Hotel, Bici & Extra)" icon={Hotel}>
                <div className="space-y-8">
                   
                   {/* HOTEL MANAGEMENT */}
@@ -1069,7 +1121,6 @@ export const App: React.FC = () => {
                      </div>
 
                      {params.hotelStays.map((stay, index) => {
-                        // Calculate day range for display
                         let startDay = 1;
                         for (let i = 0; i < index; i++) startDay += params.hotelStays[i].nights;
                         let endDay = startDay + stay.nights - 1;
@@ -1139,63 +1190,49 @@ export const App: React.FC = () => {
                                  </div>
                               </div>
                            </div>
-                           
-                           {/* Details Collapse */}
-                           <div className="mt-2 pt-2 border-t border-rose-100 grid grid-cols-1 md:grid-cols-3 gap-3">
-                              <div>
-                                 <label className="text-[10px] font-bold text-slate-400 uppercase">Pagamento</label>
-                                 <input type="text" placeholder="es. 30% acconto" className="w-full text-xs bg-white/50 border-slate-200 rounded" 
-                                    value={stay.paymentTerms}
-                                    onChange={e => {
-                                       const ns = [...params.hotelStays]; ns[index].paymentTerms = e.target.value; setParams({...params, hotelStays: ns});
-                                    }}
-                                 />
-                              </div>
-                              <div>
-                                 <label className="text-[10px] font-bold text-slate-400 uppercase">Cancellazione</label>
-                                 <input type="text" placeholder="es. 15gg prima" className="w-full text-xs bg-white/50 border-slate-200 rounded"
-                                    value={stay.cancellationPolicy}
-                                    onChange={e => {
-                                       const ns = [...params.hotelStays]; ns[index].cancellationPolicy = e.target.value; setParams({...params, hotelStays: ns});
-                                    }}
-                                 />
-                              </div>
-                              <div>
-                                 <label className="text-[10px] font-bold text-slate-400 uppercase">Suppl. DUS</label>
-                                 <div className="relative">
-                                    <span className="absolute left-2 top-1.5 text-slate-400 text-[10px]">€</span>
-                                    <input type="number" className="w-full text-xs bg-white/50 border-slate-200 rounded pl-5"
-                                       value={stay.dusSupplement}
-                                       onChange={e => {
-                                          const ns = [...params.hotelStays]; ns[index].dusSupplement = parseFloat(e.target.value)||0; setParams({...params, hotelStays: ns});
-                                       }}
-                                    />
-                                 </div>
-                              </div>
-                           </div>
                         </div>
                      )})}
-                     
-                     {/* Total Check */}
-                     <div className="flex justify-end">
-                        {params.hotelStays.reduce((a,b)=>a+b.nights,0) !== params.durationDays && (
-                           <span className="text-xs text-red-500 font-bold flex items-center">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              Totale notti hotel ({params.hotelStays.reduce((a,b)=>a+b.nights,0)}) diverso dalla durata ({params.durationDays})
-                           </span>
-                        )}
-                     </div>
                   </div>
 
                   <div className="h-px bg-slate-200 my-6"></div>
 
-                  {/* BIKES */}
+                  {/* BIKES & DINNER */}
                   <DailyCostGrid 
                      label="Noleggio Bici Clienti (Costo giornaliero)" 
                      values={params.bikeDailyRentalCosts} 
                      onChange={vals => setParams({...params, bikeDailyRentalCosts: vals})} 
                      icon={Bike}
                   />
+                  <DailyCostGrid 
+                     label="Cene Clienti (Costo giornaliero)" 
+                     values={params.clientDailyDinnerCosts} 
+                     onChange={vals => setParams({...params, clientDailyDinnerCosts: vals})} 
+                     icon={Utensils}
+                  />
+                  
+                  <div className="h-px bg-slate-200 my-6"></div>
+                  
+                  {/* EXTRA SERVICES */}
+                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                       <NumberInput 
+                           label="Transfer A/R (a persona)" 
+                           value={params.clientTransferCost} 
+                           onChange={v => setParams({...params, clientTransferCost: v})} 
+                           icon={Bus}
+                       />
+                       <NumberInput 
+                           label="Esperienze/Visite (a persona)" 
+                           value={params.clientExperienceCost} 
+                           onChange={v => setParams({...params, clientExperienceCost: v})} 
+                           icon={Ticket}
+                       />
+                       <NumberInput 
+                           label="Assicurazione (a persona)" 
+                           value={params.clientInsuranceCost} 
+                           onChange={v => setParams({...params, clientInsuranceCost: v})} 
+                           icon={ShieldCheck}
+                       />
+                   </div>
 
                </div>
             </SectionCard>
@@ -1222,30 +1259,35 @@ export const App: React.FC = () => {
                       <span className="block text-xl font-bold">€{costs.costPerPerson.toFixed(0)}</span>
                    </div>
                    <div className="bg-white/10 p-3 rounded-xl backdrop-blur-sm">
-                      <span className="block text-[10px] text-brand-300 uppercase font-bold">Profitto</span>
+                      <span className="block text-[10px] text-brand-300 uppercase font-bold">Profitto Netto</span>
                       <span className="block text-xl font-bold text-brand-300">€{costs.totalProfit.toFixed(0)}</span>
                    </div>
                 </div>
 
-                <div className="border-t border-white/10 pt-4 flex items-center justify-between">
-                   <div className="flex items-center group/tooltip relative">
-                      <span className="text-xs font-medium text-slate-400 mr-2">BREAK EVEN POINT</span>
-                      <Info className="w-3.5 h-3.5 text-slate-500 cursor-help" />
-                      
-                      {/* Tooltip */}
-                      <div className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-slate-800 text-slate-200 text-xs rounded-lg shadow-xl opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-50">
-                         Il numero minimo di partecipanti per coprire i costi fissi (Guida, Van, Staff). Sotto questo numero, vai in perdita.
-                      </div>
+                <div className="border-t border-white/10 pt-4 space-y-2">
+                   <div className="flex justify-between text-xs text-slate-400">
+                      <span>Commissioni Incluse ({params.bankingFeePercent + params.agencyCommissionPercent}%)</span>
+                      <span>€{costs.commercialCosts.total.toFixed(0)}</span>
                    </div>
-                   <div className={`flex items-center px-3 py-1 rounded-full text-xs font-bold ${costs.isBreakEvenImpossible || costs.breakEvenParticipants > params.participants ? 'bg-red-500/20 text-red-300' : 'bg-green-500/20 text-green-300'}`}>
-                      {costs.isBreakEvenImpossible ? (
-                        <span className="flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Impossibile</span>
-                      ) : (
-                        <span className="flex items-center">
-                           <Users className="w-3 h-3 mr-1"/> 
-                           <span className="text-lg mr-1">{costs.breakEvenParticipants}</span> partecipanti
-                        </span>
-                      )}
+                   <div className="flex items-center justify-between">
+                     <div className="flex items-center group/tooltip relative">
+                        <span className="text-xs font-medium text-slate-400 mr-2">BREAK EVEN POINT</span>
+                        <Info className="w-3.5 h-3.5 text-slate-500 cursor-help" />
+                        
+                        <div className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-slate-800 text-slate-200 text-xs rounded-lg shadow-xl opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-50">
+                           Il numero minimo di partecipanti per coprire i costi fissi.
+                        </div>
+                     </div>
+                     <div className={`flex items-center px-3 py-1 rounded-full text-xs font-bold ${costs.isBreakEvenImpossible || costs.breakEvenParticipants > params.participants ? 'bg-red-500/20 text-red-300' : 'bg-green-500/20 text-green-300'}`}>
+                        {costs.isBreakEvenImpossible ? (
+                          <span className="flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Impossibile</span>
+                        ) : (
+                          <span className="flex items-center">
+                             <Users className="w-3 h-3 mr-1"/> 
+                             <span className="text-lg mr-1">{costs.breakEvenParticipants}</span> pax
+                          </span>
+                        )}
+                     </div>
                    </div>
                 </div>
               </div>
@@ -1269,7 +1311,7 @@ export const App: React.FC = () => {
                  onClick={handleExportPDF}
                  className="flex items-center justify-center px-4 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold transition-all shadow-lg shadow-rose-500/30"
                >
-                 <FileDown className="w-4 h-4 mr-2" /> PDF
+                 <FileText className="w-4 h-4 mr-2" /> PDF
                </button>
             </div>
 

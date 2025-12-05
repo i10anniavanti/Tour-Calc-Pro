@@ -27,6 +27,8 @@ export interface TripParams {
   // Costi Staff
   hasGuide: boolean;
   guide: StaffConfig;
+  guideBikeDailyCosts: number[]; // NUOVO: Costo bici guida
+
   hasDriver: boolean;
   driver: StaffConfig;
   
@@ -35,7 +37,7 @@ export interface TripParams {
   staffDailyLunchCostsBefore: number[];
   staffDailyLunchCostsAfter: number[];
   
-  staffDailyAccommodationCosts: number[]; // Nuovo: Alloggio staff specifico (se diverso da clienti o per giorni extra)
+  staffDailyAccommodationCosts: number[];
   staffDailyAccommodationCostsBefore: number[];
   staffDailyAccommodationCostsAfter: number[];
 
@@ -47,9 +49,24 @@ export interface TripParams {
   fuelDailyCosts: number[];
   fuelDailyCostsBefore: number[];
   fuelDailyCostsAfter: number[];
+  
+  staffTollsCost: number; // NUOVO: Pedaggi
 
-  hotelStays: HotelStay[]; // Gestione soggiorni hotel (blocchi di notti)
-  bikeDailyRentalCosts: number[]; // Array costo bici per persona per ogni giorno (CLIENTI)
+  // Sviluppo
+  scoutingCost: number; // NUOVO: Ricognizione e sviluppo
+
+  // Clienti
+  hotelStays: HotelStay[];
+  bikeDailyRentalCosts: number[];
+  
+  clientTransferCost: number; // NUOVO: Transfer A/R a persona
+  clientInsuranceCost: number; // NUOVO: Assicurazione a persona
+  clientExperienceCost: number; // NUOVO: Visite/Esperienze a persona
+  clientDailyDinnerCosts: number[]; // NUOVO: Cene clienti giornaliere
+
+  // Commerciale
+  bankingFeePercent: number; // NUOVO: % Incasso (es. 3%)
+  agencyCommissionPercent: number; // NUOVO: % Intermediario
 }
 
 export interface CostBreakdown {
@@ -58,20 +75,32 @@ export interface CostBreakdown {
     staffTravel: number;
     staffAccommodation: number;
     staffLunch: number;
+    guideBike: number; // NUOVO
     vanRental: number;
     fuel: number;
+    tolls: number; // NUOVO
+    scouting: number; // NUOVO
     total: number;
   };
   variableCosts: {
     clientAccommodation: number;
     clientBike: number;
+    clientTransfer: number; // NUOVO
+    clientInsurance: number; // NUOVO
+    clientExperience: number; // NUOVO
+    clientDinner: number; // NUOVO
     total: number;
   };
-  totalCost: number;
+  commercialCosts: { // NUOVO
+    bankingFees: number;
+    agencyCommissions: number;
+    total: number;
+  };
+  totalCost: number; // Costi Operativi (Fissi + Variabili)
   costPerPerson: number;
   suggestedPricePerPerson: number;
   totalRevenue: number;
-  totalProfit: number;
-  breakEvenParticipants: number; // Minimo partecipanti per coprire i costi
+  totalProfit: number; // Profitto Netto (dopo costi e commissioni)
+  breakEvenParticipants: number;
   isBreakEvenImpossible: boolean;
 }
