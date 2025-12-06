@@ -30,24 +30,24 @@ const resizeArray = (currentArray: number[], newSize: number, defaultValue: numb
 
 const getSum = (arr: number[]) => arr ? arr.reduce((a, b) => a + b, 0) : 0;
 
-const DEFAULT_DURATION = 0; // Impostato a 0 come richiesto
+const DEFAULT_DURATION = 7; // Impostato a 7 come default per visualizzare le griglie
 
 // Initial State - TUTTO A ZERO per permettere il calcolo incrementale
 const initialParams: TripParams = {
   tripName: "Nuovo Tour",
-  participants: 0, // Impostato a 0
-  durationDays: DEFAULT_DURATION, // Impostato a 0
-  profitMarginPercent: 0, // Impostato a 0
+  participants: 0, 
+  durationDays: DEFAULT_DURATION,
+  profitMarginPercent: 0,
   
   // Costi Staff
   hasGuide: true,
   guide: {
     dailyRates: Array(DEFAULT_DURATION).fill(0),
-    dailyRatesBefore: [],
-    dailyRatesAfter: [],
+    dailyRatesBefore: [0],
+    dailyRatesAfter: [0],
     travelCost: 0,
-    extraDaysBefore: 0,
-    extraDaysAfter: 0,
+    extraDaysBefore: 1,
+    extraDaysAfter: 1,
   },
   guideBikeDailyCosts: Array(DEFAULT_DURATION).fill(0),
 
@@ -316,9 +316,6 @@ export const App: React.FC = () => {
          if (diff > 0) {
              newStays[newStays.length - 1] = { ...lastStay, nights: lastStay.nights + diff };
          } else if (diff < 0) {
-             // Logic to reduce nights... complex if 0, simplified:
-             // Se riduciamo drasticamente, resettiamo a un default o accorciamo l'ultimo
-             // Per semplicità se andiamo a 0, hotel stays resta ma con 0 notti
              let remove = Math.abs(diff);
              for (let i = newStays.length - 1; i >= 0 && remove > 0; i--) {
                 if (newStays[i].nights > remove) {
@@ -326,7 +323,7 @@ export const App: React.FC = () => {
                    remove = 0;
                 } else {
                    remove -= newStays[i].nights;
-                   newStays[i].nights = 0; // Or remove stay? Keeping struct safer
+                   newStays[i].nights = 0; 
                 }
              }
          }
@@ -877,7 +874,7 @@ export const App: React.FC = () => {
               <Calculator className="w-6 h-6 text-brand-200" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.15</h1>
+              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.16</h1>
               <div className="flex items-center space-x-2 text-xs text-brand-200">
                 <span className="opacity-80">PROFESSIONAL PLANNING TOOL</span>
                 {lastAutoSave && (
@@ -1033,6 +1030,15 @@ export const App: React.FC = () => {
                           <NumberInput label="Giorni Prima" value={params.guide.extraDaysBefore} onChange={v => handleExtraDaysChange('guide', 'before', v)} icon={Clock} />
                           <NumberInput label="Giorni Dopo" value={params.guide.extraDaysAfter} onChange={v => handleExtraDaysChange('guide', 'after', v)} icon={Clock} />
                        </div>
+                       
+                       {params.guide.extraDaysBefore > 0 && (
+                          <DailyCostGrid 
+                            label="Compenso Guida (Prima)" 
+                            values={params.guide.dailyRatesBefore} 
+                            onChange={vals => setParams({...params, guide: {...params.guide, dailyRatesBefore: vals}})} 
+                            variant="before"
+                          />
+                       )}
 
                        <DailyCostGrid 
                          label="Compenso Guida (Durante il Tour)" 
@@ -1041,6 +1047,15 @@ export const App: React.FC = () => {
                          icon={User}
                          helperText="Tariffe 90, 100, 110, 120 (+ 20% di ritenuta)"
                        />
+                       
+                       {params.guide.extraDaysAfter > 0 && (
+                          <DailyCostGrid 
+                            label="Compenso Guida (Dopo)" 
+                            values={params.guide.dailyRatesAfter} 
+                            onChange={vals => setParams({...params, guide: {...params.guide, dailyRatesAfter: vals}})} 
+                            variant="after"
+                          />
+                       )}
                        
                        <div className="h-px bg-indigo-200/50 my-4"></div>
 
@@ -1071,15 +1086,33 @@ export const App: React.FC = () => {
                         </div>
 
                         {/* Driver Fees */}
+                        {params.driver.extraDaysBefore > 0 && (
+                          <DailyCostGrid label="Compenso Autista (Prima)" values={params.driver.dailyRatesBefore} onChange={vals => setParams({...params, driver: {...params.driver, dailyRatesBefore: vals}})} variant="before" />
+                        )}
                         <DailyCostGrid label="Compenso Autista (Tour)" values={params.driver.dailyRates} onChange={vals => setParams({...params, driver: {...params.driver, dailyRates: vals}})} />
+                        {params.driver.extraDaysAfter > 0 && (
+                          <DailyCostGrid label="Compenso Autista (Dopo)" values={params.driver.dailyRatesAfter} onChange={vals => setParams({...params, driver: {...params.driver, dailyRatesAfter: vals}})} variant="after" />
+                        )}
                         
                         <div className="h-px bg-indigo-200/50 my-6"></div>
 
                         {/* Van Costs */}
+                        {params.driver.extraDaysBefore > 0 && (
+                          <DailyCostGrid label="Noleggio Van (Prima)" values={params.vanDailyRentalCostsBefore} onChange={vals => setParams({...params, vanDailyRentalCostsBefore: vals})} icon={Bus} variant="before" />
+                        )}
                         <DailyCostGrid label="Noleggio Van (Tour)" values={params.vanDailyRentalCosts} onChange={vals => setParams({...params, vanDailyRentalCosts: vals})} icon={Bus} />
+                        {params.driver.extraDaysAfter > 0 && (
+                          <DailyCostGrid label="Noleggio Van (Dopo)" values={params.vanDailyRentalCostsAfter} onChange={vals => setParams({...params, vanDailyRentalCostsAfter: vals})} icon={Bus} variant="after" />
+                        )}
                         
                         {/* Fuel Costs */}
+                        {params.driver.extraDaysBefore > 0 && (
+                           <DailyCostGrid label="Carburante (Prima)" values={params.fuelDailyCostsBefore} onChange={vals => setParams({...params, fuelDailyCostsBefore: vals})} icon={Fuel} variant="before" />
+                        )}
                         <DailyCostGrid label="Carburante (Tour)" values={params.fuelDailyCosts} onChange={vals => setParams({...params, fuelDailyCosts: vals})} icon={Fuel} />
+                        {params.driver.extraDaysAfter > 0 && (
+                           <DailyCostGrid label="Carburante (Dopo)" values={params.fuelDailyCostsAfter} onChange={vals => setParams({...params, fuelDailyCostsAfter: vals})} icon={Fuel} variant="after" />
+                        )}
                         
                         <div className="mt-4">
                            <NumberInput 
@@ -1102,8 +1135,24 @@ export const App: React.FC = () => {
                       <h3 className="font-bold text-slate-800 mb-4 flex items-center"><Hotel className="w-4 h-4 mr-2"/> Vitto e Alloggio Staff</h3>
                       
                       <div className="space-y-6">
+                         {/* PRE */}
+                         {(params.guide.extraDaysBefore > 0 || params.driver.extraDaysBefore > 0) && (
+                           <>
+                             <DailyCostGrid label="Hotel Staff (Prima)" values={params.staffDailyAccommodationCostsBefore} onChange={vals => setParams({...params, staffDailyAccommodationCostsBefore: vals})} variant="before" />
+                             <DailyCostGrid label="Pasti Staff (Prima)" values={params.staffDailyLunchCostsBefore} onChange={vals => setParams({...params, staffDailyLunchCostsBefore: vals})} icon={Utensils} variant="before" />
+                           </>
+                         )}
+
                          <DailyCostGrid label="Hotel Staff (Tour)" values={params.staffDailyAccommodationCosts} onChange={vals => setParams({...params, staffDailyAccommodationCosts: vals})} />
                          <DailyCostGrid label="Pasti Staff (Tour)" values={params.staffDailyLunchCosts} onChange={vals => setParams({...params, staffDailyLunchCosts: vals})} icon={Utensils} />
+
+                         {/* POST */}
+                         {(params.guide.extraDaysAfter > 0 || params.driver.extraDaysAfter > 0) && (
+                           <>
+                             <DailyCostGrid label="Hotel Staff (Dopo)" values={params.staffDailyAccommodationCostsAfter} onChange={vals => setParams({...params, staffDailyAccommodationCostsAfter: vals})} variant="after" />
+                             <DailyCostGrid label="Pasti Staff (Dopo)" values={params.staffDailyLunchCostsAfter} onChange={vals => setParams({...params, staffDailyLunchCostsAfter: vals})} icon={Utensils} variant="after" />
+                           </>
+                         )}
                       </div>
                    </div>
                 )}
