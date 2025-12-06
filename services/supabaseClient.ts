@@ -9,6 +9,15 @@ const env = (import.meta as any).env || {};
 const supabaseUrl = env.VITE_SUPABASE_URL;
 const supabaseKey = env.VITE_SUPABASE_KEY;
 
+// Logging per debug (visibile premendo F12 -> Console)
+if (!supabaseUrl || !supabaseKey) {
+  console.warn("⚠️ TOURCALC: Variabili Supabase mancanti. L'app girerà in modalità LOCALE.");
+  if (!supabaseUrl) console.warn(" - Manca VITE_SUPABASE_URL");
+  if (!supabaseKey) console.warn(" - Manca VITE_SUPABASE_KEY");
+} else {
+  console.log("✅ TOURCALC: Variabili Supabase trovate. Connessione Cloud attiva.");
+}
+
 // Inizializza il client solo se le chiavi esistono (non sono stringhe vuote o undefined)
 export const supabase = (supabaseUrl && supabaseKey) 
   ? createClient(supabaseUrl, supabaseKey) 

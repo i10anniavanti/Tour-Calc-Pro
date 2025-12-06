@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Users, Calendar, User, Bus, Truck, Hotel, Bike, DollarSign, 
@@ -9,7 +10,6 @@ import {
 } from 'lucide-react';
 import { TripParams, CostBreakdown, HotelStay } from './types';
 import { NumberInput, Toggle } from './components/InputSection';
-import { CostChart } from './components/CostChart';
 import { generateTripProposal, analyzeCostsAI } from './services/geminiService';
 import { supabase, saveTripToCloud, getTripsFromCloud, deleteTripFromCloud, CloudTrip } from './services/supabaseClient';
 import ReactMarkdown from 'react-markdown';
@@ -539,6 +539,14 @@ export const App: React.FC = () => {
       breakEvenParticipants = Math.ceil(fixedTotal / contributionMargin);
     }
 
+    // Nuovi Raggruppamenti per il Report
+    const driverVanTotal = driverFees + driverTravel + vanRentalTotal + fuelTotal + params.staffTollsCost;
+    const staffLogisticsTotal = staffAccTotal + staffLunchTotal;
+    const guideTotal = guideFees + guideTravel + guideBikeTotal;
+    const commercialDevTotal = commercialCostsTotal + params.scoutingCost;
+    const clientBikesTotal = clientBikeTotal;
+    const clientLogisticsTotal = clientAccTotal + clientDinnerTotal + clientTransferTotal + clientExperienceTotal + clientInsuranceTotal;
+
     return {
       fixedCosts: {
         staffFees: staffFeesTotal,
@@ -565,6 +573,14 @@ export const App: React.FC = () => {
         bankingFees,
         agencyCommissions,
         total: commercialCostsTotal
+      },
+      categoryCosts: {
+        driverVan: driverVanTotal,
+        staffLogistics: staffLogisticsTotal,
+        guide: guideTotal,
+        commercialDev: commercialDevTotal,
+        clientBikes: clientBikesTotal,
+        clientLogistics: clientLogisticsTotal
       },
       totalCost: totalCost + commercialCostsTotal, // Totale uscite reali
       costPerPerson,
@@ -861,7 +877,7 @@ export const App: React.FC = () => {
               <Calculator className="w-6 h-6 text-brand-200" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.12</h1>
+              <h1 className="text-xl font-bold tracking-tight">TourCalc Pro v2.15</h1>
               <div className="flex items-center space-x-2 text-xs text-brand-200">
                 <span className="opacity-80">PROFESSIONAL PLANNING TOOL</span>
                 {lastAutoSave && (
@@ -1386,10 +1402,32 @@ export const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Chart Card */}
+            {/* Cost Breakdown List */}
             <div className="bg-white p-6 rounded-2xl shadow-soft border border-slate-100">
-              <h3 className="text-sm font-bold text-slate-800 uppercase mb-6">Distribuzione Costi</h3>
-              <CostChart costs={costs} />
+              <h3 className="text-sm font-bold text-slate-800 uppercase mb-4">Ripartizione Costi</h3>
+              <div className="space-y-3">
+                 {[
+                    { label: "Autista/Van", value: costs.categoryCosts.driverVan, color: "bg-blue-500" },
+                    { label: "Vitto e Alloggio Staff", value: costs.categoryCosts.staffLogistics, color: "bg-indigo-500" },
+                    { label: "Guida Ciclistica", value: costs.categoryCosts.guide, color: "bg-violet-500" },
+                    { label: "Commerciale & Sviluppo", value: costs.categoryCosts.commercialDev, color: "bg-slate-500" },
+                    { label: "Noleggio Bici Gruppo", value: costs.categoryCosts.clientBikes, color: "bg-orange-500" },
+                    { label: "Costi Clienti (Hotel & Extra)", value: costs.categoryCosts.clientLogistics, color: "bg-rose-500" }
+                 ].map((item, idx) => (
+                    <div key={idx} className="group">
+                       <div className="flex justify-between text-xs mb-1">
+                          <span className="text-slate-600 font-medium">{item.label}</span>
+                          <span className="font-bold text-slate-900">€{item.value.toFixed(2)}</span>
+                       </div>
+                       <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                          <div 
+                             className={`${item.color} h-2 rounded-full transition-all duration-500 ease-out`}
+                             style={{ width: `${costs.totalCost > 0 ? (item.value / costs.totalCost) * 100 : 0}%` }}
+                          ></div>
+                       </div>
+                    </div>
+                 ))}
+              </div>
             </div>
 
             {/* Actions */}

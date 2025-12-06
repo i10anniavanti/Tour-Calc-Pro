@@ -98,6 +98,15 @@ export interface CostBreakdown {
     agencyCommissions: number;
     total: number;
   };
+  // Nuova categoria per report semplificato
+  categoryCosts: {
+    driverVan: number;
+    staffLogistics: number;
+    guide: number;
+    commercialDev: number;
+    clientBikes: number;
+    clientLogistics: number;
+  };
   totalCost: number; // Costi Operativi (Fissi + Variabili)
   costPerPerson: number;
   suggestedPricePerPerson: number;
